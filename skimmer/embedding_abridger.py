@@ -12,7 +12,7 @@ import numpy as np
 from openai import OpenAI
 import tiktoken
 
-from skimmer.abridger import ScoredSpan
+from skimmer.abridger import ScoredSpan, Abridger
 from skimmer.parser import Parser, DepParse
 from skimmer.util import abbrev, batched
 
@@ -23,7 +23,6 @@ logger.setLevel(logging.DEBUG)
 class Method(Enum):
     SENTENCE_COMPLEMENT = 'sentence-complement'
     SENTENCE_SUMMARY_COMPLEMENT = 'sentence-summary-complement'
-    SENTENCE_SUMMARY_SIMILARITY = 'sentence-summary-similarity'
     SENTENCE_SIMILARITY = 'sentence-similarity'
     SENTENCE_MEAN_OF_SAMPLES = 'sentence-mean-of-samples'
     SENTENCE_ITERATIVE = 'sentence-iterative'
@@ -40,13 +39,20 @@ class Method(Enum):
         raise Exception(f"Unknown {cls.__name__} '{s}'")
 
 
-class EmbeddingAbridger:
+class EmbeddingAbridger(Abridger):
     def __init__(self,
                  method: Method,
                  chunk_size: int,
                  parser: Parser,
                  embedder: Callable[[str], np.array],
                  summarizer: Callable[[str], str]):
+        """
+        :param method: Method to use for abridging
+        :param chunk_size: Number of sentences to abridge as a unit
+        :param parser: `Parser` object to convert document strings in sequences of `DepParse`s.
+        :param embedder: Returns embedding of input string.
+        :param summarizer: Returns summary of input string.
+        """
         self.method = method
         self.chunk_size = chunk_size
         self.parser = parser
@@ -54,13 +60,14 @@ class EmbeddingAbridger:
         self.summarize = summarizer
 
     def __call__(self, doc: str) -> list[ScoredSpan]:
+        # Use parser to divide doc into sentences (even tho we're not currently using the parses.)
         sent_parses = list(self.parser.parse(doc))
 
         scored_spans = []
         for chunk in batched(sent_parses, self.chunk_size):
             chunk_str = '\n'.join(sent.text for sent in chunk)
 
-            if self.method == Method.SENTENCE_SUMMARY_COMPLEMENT:
+            if self.method in [Method.SENTENCE_SUMMARY_COMPLEMENT]:
                 summary = self.summarize(chunk_str)
                 chunk_target = self.embed(summary)
             else:
@@ -76,7 +83,8 @@ class EmbeddingAbridger:
                 raise Exception(f"Method not implemented: {self.method}")
 
             # Noramlize to chunk-specific z-score:
-            # (TODO: Is this only necessary because I'm calculating the scores wrong?)
+            # (TODO: Should this really be necessary? Is there a better way to calculating the
+            # scores that doesn't need normalization?)
             scores = np.array([span.score for span in chunk_scores])
             mean = np.mean(scores)
             std = np.std(scores)
@@ -87,6 +95,15 @@ class EmbeddingAbridger:
 
     def score_sentence_complement(self, sent_parses: list[DepParse], doc_target: np.array) \
             -> list[ScoredSpan]:
+        """
+        The score of sentence `i` is based on the cosine similarity between the target embedding
+        (`doc_target`) and the embedding we get from omitting sentence `i`.
+        That number is typically close to 1. To turn that into a distance, we subtract it from 1.
+
+        Because the resulting distance is typically very small, and can vary in order of magnitude
+        we currently take the log of that.
+        TODO: Look at score distributions to decide if it really makes sense to take the log.
+        """
         sent_scores = []
         for s, sent_parse in enumerate(sent_parses):
             logger.info("Getting embeddings with sentence %s omitted...", s)
@@ -107,8 +124,6 @@ class EmbeddingAbridger:
         return [ScoredSpan(start=sent_parse.start, end=sent_parse.end, score=score)
                 for sent_parse, score in zip(sent_parses, sent_scores)]
 
-    # def score_iterative(self, sent_parses: list[DepParse], doc_target: np.array) \
-    #         -> list[ScoredSpan]:
     def score_mean_of_samples(self, sent_parses: list[DepParse], doc_target: np.array) \
             -> list[ScoredSpan]:
 
@@ -160,6 +175,11 @@ class EmbeddingAbridger:
 
 
 class OpenAISummarizer:
+    """
+    Summarization function (in the sense that it is __call__-able) that uses OpenAI's chat
+    interface with a summarization prompt.
+    """
+
     SUMMARIZE_PROMPT = """
         As a professional abridger, write a slightly shortened version of the provided text.
         Your version should include all the main ideas and essential information, but eliminate extraneous language, less-important points, redundant information, and redundant examples.
@@ -173,6 +193,10 @@ class OpenAISummarizer:
 
     def __init__(self, model: str = 'gpt-3.5-turbo',
                  memory: Optional[joblib.Memory] = None):
+        """
+        :param model: OpenAI model to use for summarization
+        :param memory: joblib Memory object to use for caching. If None, no caching will be done.
+        """
         self.model = model
         try:
             self.encoding = tiktoken.encoding_for_model(model)
@@ -220,6 +244,10 @@ class OpenAIEmbedding:
 
     def __init__(self, model: str = 'text-embedding-ada-002',
                  memory: Optional[joblib.Memory] = None):
+        """
+        :param model: OpenAI model to use for embedding
+        :param memory: joblib Memory object to use for caching. If None, no caching will be done.
+        """
         self.model = model
         self.embed_func = lambda model, text: OpenAIEmbedding.uncached_embed(model, text)
         if memory:
@@ -254,6 +282,15 @@ def scored_spans_as_html(doc: str, spans: list[ScoredSpan], f: IO):
 
 
 def score_to_html(doc, method, chunk_size, summary_override):
+    """
+    Do a demo run of the EmbeddingAbridger on a single doc.
+    :param doc: Document to abridge
+    :param method: Method to use for abridging
+    :param chunk_size: Number of sentences to abridge as a unit
+    :param summary_override: If not None, this string will be used as the summary instead of
+        generating one. Only for testing purposes. And only for when doc has fewer than
+        `chunk_size` sentences.
+    """
     parser = Parser('en')
     memory = joblib.Memory('cache', mmap_mode='c', verbose=0)
     embed = OpenAIEmbedding(memory=memory)
