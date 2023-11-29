@@ -14,7 +14,7 @@ import tiktoken
 
 from skimmer.abridger import ScoredSpan
 from skimmer.parser import Parser, DepParse
-from skimmer.util import abbrev
+from skimmer.util import abbrev, batched
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -29,6 +29,10 @@ class Method(Enum):
     SENTENCE_ITERATIVE = 'sentence-iterative'
 
     @classmethod
+    def default(cls) -> 'Method':
+        return Method.SENTENCE_SUMMARY_COMPLEMENT
+
+    @classmethod
     def of(cls, s: str):
         for m in cls:
             if m.value == s:
@@ -36,43 +40,57 @@ class Method(Enum):
         raise Exception(f"Unknown {cls.__name__} '{s}'")
 
 
-# class EmbeddingSpace(ABC):
-#     def encode(self, text: str) -> np.array:
-#         pass
-
 class EmbeddingAbridger:
     def __init__(self,
                  method: Method,
+                 chunk_size: int,
                  parser: Parser,
                  embedder: Callable[[str], np.array],
                  summarizer: Callable[[str], str]):
-        self.parser = parser
         self.method = method
+        self.chunk_size = chunk_size
+        self.parser = parser
         self.embed = embedder
         self.summarize = summarizer
 
     def __call__(self, doc: str) -> list[ScoredSpan]:
         sent_parses = list(self.parser.parse(doc))
 
-        if self.method == Method.SENTENCE_SUMMARY_COMPLEMENT:
-            summary = self.summarize(doc)
-            doc_target = self.embed(summary)
-        else:
-            doc_target = self.embed(doc)
+        scored_spans = []
+        for chunk in batched(sent_parses, self.chunk_size):
+            chunk_str = '\n'.join(sent.text for sent in chunk)
 
-        if self.method in [Method.SENTENCE_COMPLEMENT, Method.SENTENCE_SUMMARY_COMPLEMENT]:
-            return self.score_sentence_complement(sent_parses, doc_target)
-        elif self.method == Method.SENTENCE_SIMILARITY:
-            return self.score_similarity(sent_parses, doc_target)
-        elif self.method == Method.SENTENCE_MEAN_OF_SAMPLES:
-            return self.score_mean_of_samples(sent_parses, doc_target)
+            if self.method == Method.SENTENCE_SUMMARY_COMPLEMENT:
+                summary = self.summarize(chunk_str)
+                chunk_target = self.embed(summary)
+            else:
+                chunk_target = self.embed(chunk_str)
+
+            if self.method in [Method.SENTENCE_COMPLEMENT, Method.SENTENCE_SUMMARY_COMPLEMENT]:
+                chunk_scores = self.score_sentence_complement(chunk, chunk_target)
+            elif self.method == Method.SENTENCE_SIMILARITY:
+                chunk_scores = self.score_similarity(chunk, chunk_target)
+            elif self.method == Method.SENTENCE_MEAN_OF_SAMPLES:
+                chunk_scores = self.score_mean_of_samples(chunk, chunk_target)
+            else:
+                raise Exception(f"Method not implemented: {self.method}")
+
+            # Noramlize to chunk-specific z-score:
+            # (TODO: Is this only necessary because I'm calculating the scores wrong?)
+            scores = np.array([span.score for span in chunk_scores])
+            mean = np.mean(scores)
+            std = np.std(scores)
+            scored_spans += [span.copy(update={"score": (span.score - mean)/std})
+                             for span in chunk_scores]
+
+        return scored_spans
 
     def score_sentence_complement(self, sent_parses: list[DepParse], doc_target: np.array) \
             -> list[ScoredSpan]:
         sent_scores = []
         for s, sent_parse in enumerate(sent_parses):
             logger.info("Getting embeddings with sentence %s omitted...", s)
-            doc_minus_s = ' '.join(p.text for p in sent_parses[:s] + sent_parses[s+1:])
+            doc_minus_s = '\n'.join(p.text for p in sent_parses[:s] + sent_parses[s+1:])
             doc_minus_s_embedding = self.embed(doc_minus_s)
             sent_scores.append(math.log(1.0 - np.dot(doc_target, doc_minus_s_embedding)))
 
@@ -141,19 +159,6 @@ class EmbeddingAbridger:
                 for sent_parse, score in zip(sent_parses, sent_scores)]
 
 
-def scored_spans_as_html(doc: str, spans: list[ScoredSpan], f: IO):
-    scores = np.array([span.score for span in spans])
-    norm_scores = (scores - scores.min()) / (scores.max() - scores.min())
-    for i, span in enumerate(spans):
-        if i > 0:
-            f.write(doc[spans[i-1].end:span.start])
-        red = (1.0 - norm_scores[i]) * 128 + 128
-        green = norm_scores[i] * 128 + 128
-        f.write(f'<span style="background-color: rgb({red},{green},127);">')
-        f.write(f'<br>[{span.score:.4f}] {doc[span.start:span.end]}')
-        f.write('</span>')
-
-
 class OpenAISummarizer:
     SUMMARIZE_PROMPT = """
         As a professional abridger, write a slightly shortened version of the provided text.
@@ -209,6 +214,7 @@ class OpenAISummarizer:
         return self.summarize_func(
             self.model, self.encoding, OpenAISummarizer.SUMMARIZE_PROMPT, text)
 
+
 class OpenAIEmbedding:
     client = OpenAI()  # TODO: should probably be passed in to constructor
 
@@ -228,7 +234,26 @@ class OpenAIEmbedding:
     def __call__(self, text: str) -> np.array:
         return self.embed_func(self.model, text)
 
-def score_to_html(doc, method, summary_override):
+
+def scored_spans_as_html(doc: str, spans: list[ScoredSpan], f: IO):
+    scores = np.array([span.score for span in spans])
+    colors = np.array([[255, 127, 127],   # Red for lowest score
+                       [255, 255, 255],   # White for median
+                       [127, 255, 127]])  # Green for highest
+    min_score = np.min(scores)
+    median_score = np.median(scores)
+    max_score = np.max(scores)
+    for i, span in enumerate(spans):
+        if i > 0:
+            f.write(doc[spans[i-1].end:span.start])
+        rgb = [str(int(np.interp(scores[i], [min_score, median_score, max_score], col)))
+               for col in colors.T]
+        f.write(f'<span style="background-color: rgb({",".join(rgb)});">')
+        f.write(f'<br>[{span.score:.3f}] {doc[span.start:span.end]}')
+        f.write('</span>')
+
+
+def score_to_html(doc, method, chunk_size, summary_override):
     parser = Parser('en')
     memory = joblib.Memory('cache', mmap_mode='c', verbose=0)
     embed = OpenAIEmbedding(memory=memory)
@@ -236,7 +261,7 @@ def score_to_html(doc, method, summary_override):
         summarize = lambda _: summary_override
     else:
         summarize = OpenAISummarizer(memory=memory)
-    abridger = EmbeddingAbridger(method, parser, embed, summarize)
+    abridger = EmbeddingAbridger(method, chunk_size, parser, embed, summarize)
     spans = abridger(doc)
     with tempfile.NamedTemporaryFile('w', suffix='.html', delete=False) as f:
         print(f"Saving HTML output to: {f.name}")
@@ -249,11 +274,13 @@ def demo():
     # Parse arguments
     parser = argparse.ArgumentParser(description='Abridger')
     parser.add_argument('doc', type=str, help='Path to document to abridge')
-    parser.add_argument('--summary', type=str, default=None,
-                        help='Path to target summary used to override generates summary (for testing)')
-    parser.add_argument('--method', type=str, default='sentence-greedy',
+    parser.add_argument('--method', type=str, default=Method.default().value,
                          choices=[m.value for m in Method],
                          help='Method to use for abridging')
+    parser.add_argument('--chunk-size', type=int, default=20,
+                        help='Maximum number of sentences to abridge at once')
+    parser.add_argument('--summary', type=str, default=None,
+                        help='Path to target summary used to override generates summary (for testing)')
     args = parser.parse_args()
 
     method = Method.of(parser.parse_args().method)
@@ -265,7 +292,7 @@ def demo():
     else:
         with open(args.summary) as f:
             summary = f.read()
-    score_to_html(doc, method, summary)
+    score_to_html(doc, method, args.chunk_size, summary)
 
     return 0
 
