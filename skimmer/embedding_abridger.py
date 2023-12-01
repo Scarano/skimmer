@@ -9,7 +9,6 @@ from typing import Callable, IO, Optional
 
 import joblib
 import numpy as np
-from numpy.typing import NDArray
 from openai import OpenAI
 import tiktoken
 
@@ -28,6 +27,7 @@ class Method(Enum):
     SENTENCE_MEAN_OF_SAMPLES = 'sentence-mean-of-samples'
     SENTENCE_ITERATIVE = 'sentence-iterative'
     SENTENCE_SUMMARY_MATCHING = 'sentence-summary-matching'
+    CLAUSE_SUMMARY_MATCHING = 'clause-summary-matching'
 
     @classmethod
     def default(cls) -> 'Method':
@@ -44,7 +44,7 @@ class Method(Enum):
 class SummaryMatchingAbridger(Abridger):
     def __init__(self,
                  parser: Parser,
-                 embed: Callable[[str], NDArray[float]],
+                 embed: Callable[[list[str]], np.ndarray[float]],
                  summarize: Callable[[str], str]):
         self.parser = parser
         self.embed = embed
@@ -52,17 +52,18 @@ class SummaryMatchingAbridger(Abridger):
 
     def __call__(self, doc: str) -> list[ScoredSpan]:
         sent_parses = list(self.parser.parse(doc))
-        sent_embeddings = np.array([self.embed(sent.text) for sent in sent_parses])
+        sent_embeddings = self.embed([sent.text for sent in sent_parses])
 
         summary = self.summarize(doc)
 
         scores = np.zeros(len(sent_parses))
-        for summary_parse in self.parser.parse(summary):
+        summary_parses = self.parser.parse(summary)
+        summary_embed = self.embed([parse.text for parse in summary_parses])
+        for i in range(len(summary_embed)):
             # For each sentence i, add cosine similarity between this sentence's embedding and
             # sent_embeddings[i] to scores[i].
-            summary_embed = self.embed(summary_parse.text)
-            # print(sent_embeddings @ summary_embed)
-            scores += sent_embeddings @ summary_embed
+            # print(sent_embeddings @ summary_embed[i])
+            scores += sent_embeddings @ summary_embed[i]
 
         scores /= len(sent_parses)
 
@@ -74,7 +75,7 @@ class EmbeddingAbridger(Abridger):
                  method: Method,
                  chunk_size: int,
                  parser: Parser,
-                 embedder: Callable[[str], NDArray[float]],
+                 embedder: Callable[[list[str]], np.ndarray[float]],
                  summarizer: Callable[[str], str]):
         """
         :param method: Method to use for abridging
@@ -99,9 +100,9 @@ class EmbeddingAbridger(Abridger):
 
             if self.method in [Method.SENTENCE_SUMMARY_COMPLEMENT]:
                 summary = self.summarize(chunk_str)
-                chunk_target = self.embed(summary)
+                chunk_target = self.embed([summary])[0]
             else:
-                chunk_target = self.embed(chunk_str)
+                chunk_target = self.embed([chunk_str])[0]
 
             if self.method in [Method.SENTENCE_COMPLEMENT, Method.SENTENCE_SUMMARY_COMPLEMENT]:
                 chunk_scores = self.score_sentence_complement(chunk, chunk_target)
@@ -123,7 +124,8 @@ class EmbeddingAbridger(Abridger):
 
         return scored_spans
 
-    def score_sentence_complement(self, sent_parses: list[DepParse], doc_target: NDArray[float]) \
+    def score_sentence_complement(self,
+                                  sent_parses: list[DepParse], doc_target: np.ndarray[float]) \
             -> list[ScoredSpan]:
         """
         The score of the sentence at `sent_parses[i]` is based on the cosine similarity between
@@ -138,23 +140,23 @@ class EmbeddingAbridger(Abridger):
         for s, sent_parse in enumerate(sent_parses):
             logger.info("Getting embeddings with sentence %s omitted...", s)
             doc_minus_s = '\n'.join(p.text for p in sent_parses[:s] + sent_parses[s+1:])
-            doc_minus_s_embedding = self.embed(doc_minus_s)
+            doc_minus_s_embedding = self.embed([doc_minus_s])[0]
             sent_scores.append(math.log(1.0 - np.dot(doc_target, doc_minus_s_embedding)))
 
         return [ScoredSpan(start=sent_parse.start, end=sent_parse.end, score=score)
                 for sent_parse, score in zip(sent_parses, sent_scores)]
 
-    def score_similarity(self, sent_parses: list[DepParse], doc_target: NDArray[float]) \
+    def score_similarity(self, sent_parses: list[DepParse], doc_target: np.ndarray[float]) \
             -> list[ScoredSpan]:
         sent_scores = []
         for s, sent_parse in enumerate(sent_parses):
-            s_embedding = self.embed(sent_parse.text)
+            s_embedding = self.embed([sent_parse.text])[0]
             sent_scores.append(np.dot(doc_target, s_embedding))
 
         return [ScoredSpan(start=sent_parse.start, end=sent_parse.end, score=score)
                 for sent_parse, score in zip(sent_parses, sent_scores)]
 
-    def score_mean_of_samples(self, sent_parses: list[DepParse], doc_target: NDArray[float]) \
+    def score_mean_of_samples(self, sent_parses: list[DepParse], doc_target: np.ndarray[float]) \
             -> list[ScoredSpan]:
 
         np.random.seed(1)
@@ -163,7 +165,7 @@ class EmbeddingAbridger(Abridger):
         for s, sent_parse in enumerate(sent_parses):
             logger.info("Getting embeddings with sentence %s omitted...", s)
             doc_minus_s = ' '.join(p.text for p in sent_parses[:s] + sent_parses[s+1:])
-            doc_minus_s_embedding = self.embed(doc_minus_s)
+            doc_minus_s_embedding = self.embed([doc_minus_s])[0]
             local_scores.append(np.dot(doc_target, doc_minus_s_embedding))
 
         # compute rank_scores as rank order of values in sent_scores
@@ -185,7 +187,7 @@ class EmbeddingAbridger(Abridger):
             selected[:, t] = random_values < sample_prob
 
             resampled_doc = ' '.join(p.text for i, p in enumerate(sent_parses) if selected[i, t])
-            resampled_embedding = self.embed(resampled_doc)
+            resampled_embedding = self.embed([resampled_doc])[0]
 
             scores[t] = np.dot(doc_target, resampled_embedding)
 
@@ -279,18 +281,21 @@ class OpenAIEmbedding:
         :param memory: joblib Memory object to use for caching. If None, no caching will be done.
         """
         self.model = model
-        self.embed_func = lambda model, text: OpenAIEmbedding.uncached_embed(model, text)
+        self.embed_func = lambda mdl, texts: OpenAIEmbedding.uncached_embed(mdl, texts)
         if memory:
             self.embed_func = memory.cache(self.embed_func)
 
     @staticmethod
-    def uncached_embed(model: str, text: str) -> NDArray[float]:
-        response = OpenAIEmbedding.client.embeddings.create(model=model, input=text)
-        # TODO error checking
-        return np.array(response.data[0].embedding)
+    def uncached_embed(model: str, texts: list[str]) -> np.ndarray[float]:
+        results = []
+        for batch in batched(texts, 100):
+            response = OpenAIEmbedding.client.embeddings.create(model=model, input=batch)
+            # TODO error checking
+            results.extend(d.embedding for d in response.data)
+        return np.array(results)
 
-    def __call__(self, text: str) -> NDArray[float]:
-        return self.embed_func(self.model, text)
+    def __call__(self, texts: list[str]) -> np.ndarray[float]:
+        return self.embed_func(self.model, texts)
 
 
 def scored_spans_as_html(doc: str, spans: list[ScoredSpan], f: IO):
