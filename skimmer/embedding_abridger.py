@@ -61,10 +61,10 @@ class SummaryMatchingAbridger(Abridger):
             # For each sentence i, add cosine similarity between this sentence's embedding and
             # sent_embeddings[i] to scores[i].
             summary_embed = self.embed(summary_parse.text)
-            # print(sent_embeddings @ summary_embed)
-            scores += sent_embeddings @ summary_embed
+            # print(np.log(1.0 - (sent_embeddings @ summary_embed)))
+            scores += np.log(1.0 - (sent_embeddings @ summary_embed))
 
-        scores /= len(sent_parses)
+        scores *= -1
 
         return [ScoredSpan(start=sent_parse.start, end=sent_parse.end, score=score)
                 for sent_parse, score in zip(sent_parses, scores)]
