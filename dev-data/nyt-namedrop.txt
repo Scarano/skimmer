@@ -1,0 +1,49 @@
+Police departments from New Jersey to California have been sounding the alarm in recent days about NameDrop, a new feature of the Apple iPhone’s latest operating system that allows users to wirelessly exchange contact information.
+
+Apple declined to comment, but experts say the warnings that “scammers and thieves” could exploit the feature to harvest a user’s personal information appear to be overblown, if not entirely unfounded.
+
+For starters, the devices must be practically touching for NameDrop to work, and both users must agree to share the information.
+
+Mark Bartholomew, a law professor who focuses on cyber law at the University at Buffalo, said that NameDrop had enough stopgaps in place to prevent someone’s information from being stolen.
+
+“To the extent there’s panic here about nonconsensual taking of contact information, I’m not that worried,” he said.
+
+Here’s what you need to know.
+
+## How does NameDrop work?
+
+To use the feature, Apple users need to have updated their devices to the latest version of the operating system — iOS 17.1 for the iPhone or watchOS 10.1 for the Apple Watch, both of which have the feature enabled as a default setting.
+
+Users hold one device over the other, within a few centimeters, until NameDrop appears on both screens. They can then choose to exchange contact details, or one may simply receive contact information from the other without reciprocating. An exchange can be canceled by pulling a device away or by locking its screen before the transfer is complete.
+
+NameDrop works similarly to AirDrop, which allows users of Apple laptops, iPhones and iPads to exchange photos as long as they are within Bluetooth and Wi-Fi range. But while some people exploited that feature in its early days to harass unsuspecting strangers with explicit images, it appears to be much harder, if not impossible, to use NameDrop to send unwanted information or harvest personal details without consent.
+
+Even if someone has NameDrop enabled on an iPhone, the phone must be almost touching another device for the feature to work, and both users would still have to agree to share. And even then, the only information that is shared are the details that users have added to their contact cards.
+
+## What are the police saying?
+
+The warnings, mostly shared on Facebook, follow a similar format. NameDrop allows information to be shared between phones that come within close contact, the warnings say. Young people are at particular risk, the police say, telling parents to disable the feature on their children’s phones, and on their own phones as well.
+
+Not all the warnings lacked nuance. For example, the police in South Bend, Ind., explained the feature in a post that aimed to separate what it described as “rumors” from “facts.”
+
+Addressing a rumor that enabling NameDrop lets people “retrieve your contact information simply by walking past you,” the department explained that the devices need to be centimeters away from each other, and that users must tap “share” to exchange information.
+
+## Contact-sharing features are not new.
+
+Wireless methods for sharing contacts among mobile devices have been around for years. For example, digital business cards have become an increasingly popular networking tool.
+
+Like NameDrop, the cards use near-field communication, or N.F.C., a technology that allows for the short-distance transmission of data between devices. (They can also be shared by scanning a QR code.)
+
+Unlike NameDrop, digital business cards work on any mobile device, not just those running Apple’s iOS software.
+
+Google used to have a feature on its mobile operating system called Android Beam, which let users share contacts, photos, maps, links and other information by bumping the backs of two phones together. Some Android users were upset when it was quietly discontinued in 2019. Google replaced it with an app called Nearby Share.
+
+## NameDrop is easy to disable.
+
+Because NameDrop was automatically enabled as a default setting with the new iOS 17.1, some iPhone users who updated their devices might not even realize that they have it.
+
+If you want to turn it off, the steps are simple: Go to the iPhone’s settings, tap “General,” and select “Airdrop.” Then toggle off the “Bringing Devices Together” option.
+
+Even if the privacy concerns about NameDrop are largely unfounded, Professor Bartholomew of the University at Buffalo said it could be helpful to be skeptical about emerging technology.
+
+“Too often we see new technologies and exchange our information without thinking about the trade off,” he said. When a new feature is introduced, he added, “we should be cautious before we embrace it.”
