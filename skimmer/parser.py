@@ -73,7 +73,12 @@ class Parser:
     def __init__(self, language: str):
         # This includes mwt (multi-word tokenization) because some languages require it.
         # For English, though, it just results in a warning.
-        self.pipeline = stanza.Pipeline(language, processors="tokenize,mwt,pos,lemma,depparse",
+        self.pipeline = stanza.Pipeline(language,
+                                        processors={'tokenize': 'spacy',
+                                                    # 'mwt': 'default',
+                                                    'pos': 'default',
+                                                    'lemma': 'default',
+                                                    'depparse': 'default'},
                                         download_method=stanza.DownloadMethod.REUSE_RESOURCES)
 
     def parse(self, text: str) -> Generator[DepParse, None, None]:
