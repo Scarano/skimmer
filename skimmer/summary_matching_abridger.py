@@ -7,12 +7,12 @@ import webbrowser
 from enum import Enum
 from itertools import combinations, groupby
 import numpy as np
-from typing import Callable
+from typing import Callable, IO
 
 import joblib
 
 from skimmer.abridger import Abridger, ScoredSpan
-from skimmer.embedding_abridger import OpenAIEmbedding, OpenAISummarizer, scored_spans_as_html
+from skimmer.embedding_abridger import OpenAIEmbedding, OpenAISummarizer
 from skimmer.parser import Parser, DepParse
 from skimmer.util import equal_spans
 
@@ -36,11 +36,6 @@ class Method(Enum):
         raise Exception(f"Unknown {cls.__name__} '{s}'")
 
 
-# TODO: remove this
-class ScoredString(ScoredSpan):
-    text: str
-
-
 class SummaryMatchingAbridger(Abridger):
     def __init__(self,
                  parser: Parser,
@@ -50,7 +45,7 @@ class SummaryMatchingAbridger(Abridger):
         self.embed = embed
         self.summarize = summarize
 
-    def __call__(self, doc: str) -> list[ScoredString]:
+    def __call__(self, doc: str) -> list[ScoredSpan]:
         sent_parses = list(self.parser.parse(doc))
         sent_embeddings = self.embed([sent.text for sent in sent_parses])
 
@@ -67,9 +62,9 @@ class SummaryMatchingAbridger(Abridger):
 
         scores /= len(sent_parses)
 
-        return [ScoredString(start=sent_parse.start, end=sent_parse.end,
-                             text=sent_parse.text,
-                             score=score)
+        return [ScoredSpan(start=sent_parse.start, end=sent_parse.end,
+                           text=sent_parse.text,
+                           score=score)
                 for sent_parse, score in zip(sent_parses, scores)]
 
 
@@ -94,10 +89,11 @@ class SummaryMatchingClauseAbridger:
         variations = [(s, v)
                       for s, p in enumerate(sent_parses)
                       for v in self.generate_sentence_variations(p)]
-        for (s, v) in variations:
-            logger.info("%d: %s", s, v)
-            logger.info("%s", self.substring(doc, v))
-        sent_embeddings = self.embed([self.substring(doc, v) for _, v in variations])
+        # for (s, v) in variations:
+        #     logger.info("%d: %s", s, v)
+        #     logger.info("%s", self.substring(doc, sent_parses[s], v))
+        sent_embeddings = self.embed([self.substring(doc, sent_parses[s], v)
+                                      for s, v in variations])
 
         summary = self.summarize(doc)
 
@@ -115,23 +111,23 @@ class SummaryMatchingClauseAbridger:
         for s, var_pairs in groupby(zip(variations, var_scores), key=lambda pair: pair[0][0]):
             token_max_scores = np.zeros(len(sent_parses[s]))
             for (_, v), score in var_pairs:
-                logger.info("%f.3: %s", score, self.substring(doc, v))
-                for start, end in v:
-                    logger.info("%d -> %d", start, end)
-                    for i in range(start, end):
-                        if score > token_max_scores[i]:
-                            token_max_scores[i] = score
+                # logger.info("%f.3: %s", score, self.substring(doc, sent_parses[s], v))
+                for i in v:
+                    if score > token_max_scores[i]:
+                        token_max_scores[i] = score
 
             for start, end, score in equal_spans(token_max_scores):
-                scored_spans.append(ScoredSpan(start=start, end=end, score=score))
+                scored_spans.append(ScoredSpan(start=sent_parses[s].spans[start][0],
+                                               end=sent_parses[s].spans[end][1],
+                                               score=score))
 
         return scored_spans
 
-    def generate_sentence_variations(self, parse: DepParse) -> list[list[tuple[int, int]]]:
+    def generate_sentence_variations(self, parse: DepParse) -> list[list[int]]:
         modifiers = [i
             for i, r in enumerate(parse.relations)
             if SummaryMatchingClauseAbridger.MODIFIER_PATTERN.fullmatch(r)
-                and len(parse.constituents) > SummaryMatchingClauseAbridger.MIN_MODIFIER_LENGTH]
+                and len(parse.constituents[i]) > SummaryMatchingClauseAbridger.MIN_MODIFIER_LENGTH]
         top_modifiers = sorted(modifiers, key=lambda i: -len(parse.constituents[i]))[:self.max_removals]
 
         # combos is power set of modifiers to be considered for removal
@@ -142,39 +138,32 @@ class SummaryMatchingClauseAbridger:
         for combo in combos:
             mask = set.union(set(), *(parse.constituents[i] for i in combo))
             included_tokens = [i for i in range(len(parse)) if i not in mask]
-            # logger.info("--------------")
-            # logger.info("%s", parse.text)
-            # logger.info("%s", mask)
-            included_spans = parse.subspans(included_tokens)
-            # logger.info("%s", included_spans)
-            # logger.info("%s", parse.substring(included_spans))
-            variations.add(tuple(parse.subspans(included_tokens)))
-        # for v in variations:
-        #     logger.info("%s", v)
+            variations.add(tuple(included_tokens))
 
         return [list(v) for v in sorted(variations)]
 
     @staticmethod
-    def substring(doc, included_spans: list[tuple[int, int]]) -> str:
-        return ''.join(doc[start:end] for start, end in included_spans)
+    def substring(doc, sent: DepParse, included_tokens: list[int]) -> str:
+        return ' '.join(doc[start:end]
+                        for start, end in sent.subspans(included_tokens))
 
-# def scored_spans_as_html(doc: str, spans: list[ScoredString], f: IO):
-#     scores = np.array([span.score for span in spans])
-#     colors = np.array([[255, 127, 127],   # Red for lowest score
-#                        [255, 255, 255],   # White for median
-#                        [127, 255, 127]])  # Green for highest
-#     min_score = np.min(scores)
-#     median_score = np.median(scores)
-#     max_score = np.max(scores)
-#     for i, span in enumerate(spans):
-#         if i > 0:
-#             f.write(doc[spans[i-1].end:span.start])
-#         rgb = [str(int(np.interp(scores[i], [min_score, median_score, max_score], col)))
-#                for col in colors.T]
-#         f.write(f'<span style="background-color: rgb({",".join(rgb)});">')
-#         f.write(f'<br>[{span.score:.3f}] {span.text}')
-#         f.write('</span>')
-
+def scored_spans_as_html(doc: str, spans: list[ScoredSpan], f: IO):
+    scores = np.array([span.score for span in spans])
+    colors = np.array([[255, 127, 127],   # Red for lowest score
+                       [255, 255, 255],   # White for median
+                       [127, 255, 127]])  # Green for highest
+    min_score = np.min(scores)
+    median_score = np.median(scores)
+    max_score = np.max(scores)
+    for i, span in enumerate(spans):
+        if i > 0:
+            f.write(doc[spans[i-1].end:span.start].replace('\n\n', '\n<br/><br/>\n'))
+        rgb = [str(int(np.interp(scores[i], [min_score, median_score, max_score], col)))
+               for col in colors.T]
+        span_text = doc[span.start:span.end].replace('\n\n', '\n<br/><br/>\n')
+        f.write(f'<span style="background-color: rgb({",".join(rgb)});">')
+        f.write(f'{span_text} [{span.score:.3f}] ')
+        f.write('</span>')
 
 def score_to_html(doc, method):
     """

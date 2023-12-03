@@ -82,9 +82,6 @@ class DepParse:
             return [(self.spans[i][0], self.spans[j][1])
                     for i, j in contiguous_spans(included_tokens)]
 
-    def substring(self, included_tokens: list[int]) -> str:
-        return ''.join(self.text[start:end] for start, end in self.subspans(included_tokens))
-
 
 class Parser:
     def __init__(self, language: str):
