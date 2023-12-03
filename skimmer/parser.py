@@ -5,6 +5,8 @@ from typing import Iterable, TypeVar, Generator
 
 import stanza
 
+from skimmer.util import contiguous_spans
+
 
 def reverse_dict(d):
     reversed_dict = {}
@@ -68,6 +70,21 @@ class DepParse:
     def end(self) -> int:
         return self.spans[-1][1]
 
+    def __len__(self) -> int:
+        return len(self.words)
+
+    def subspans(self, included_tokens: list[int]) -> list[tuple[int, int]]:
+        if len(included_tokens) == 0:
+            return []
+        elif len(included_tokens) == 1:
+            return [self.spans[included_tokens[0]]]
+        else:
+            return [(self.spans[i][0], self.spans[j][1])
+                    for i, j in contiguous_spans(included_tokens)]
+
+    def substring(self, included_tokens: list[int]) -> str:
+        return ''.join(self.text[start:end] for start, end in self.subspans(included_tokens))
+
 
 class Parser:
     def __init__(self, language: str):
@@ -85,6 +102,9 @@ class Parser:
         parsed_doc = self.pipeline(text)
 
         for sentence in parsed_doc.sentences:
+            if not sentence.words:
+                continue
+
             if not all(w.id == i + 1 for i, w in enumerate(sentence.words)):
                 logging.warning(f"Word ID sanity check failed ('{sentence.text}")
 
@@ -158,7 +178,7 @@ def demo():
             start = parse.spans[parse.constituents[i][0]][0]
             end = parse.spans[parse.constituents[i][-1]][1]
             cons_text = text[start:end]
-            print(f"{i:3} {w:10}: {parse.relations[i]:10} {cons_text}")
+            print(f"{i:3} {w:10}: {parse.relations[i]:10} {start}->{end} {cons_text}")
 
 
 if __name__ == '__main__':

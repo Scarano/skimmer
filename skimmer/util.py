@@ -1,4 +1,7 @@
 from itertools import islice
+from typing import Any
+
+from numpy.typing import ArrayLike
 
 
 def abbrev(s: str, max_len: int=20) -> str:
@@ -21,3 +24,45 @@ def batched(iterable, n):
     it = iter(iterable)
     while batch := list(islice(it, n)):
         yield batch
+
+def contiguous_spans(ints: list[int]) -> list[tuple[int, int]]:
+    """
+    Find contiguous spans of incrementing integers in a list.
+    """
+
+    if not ints:
+        return []
+
+    spans = []
+    start = end = ints[0]
+
+    for i in ints[1:]:
+        if i == end + 1:
+            end = i
+        else:
+            spans.append((start, end))
+            start = end = i
+    spans.append((start, end))
+
+    return spans
+
+def equal_spans(values: ArrayLike) -> list[tuple[int, int, Any]]:
+    """
+    Find runs of equal values in the input sequence. For each such run, output the start index,
+    the end index, and the value
+    """
+
+    spans = []
+    start = end = 0
+    value = values[0]
+
+    for i, v in enumerate(values[1:], 1):
+        if v == value:
+            end = i
+        else:
+            spans.append((start, end, value))
+            start = end = i
+            value = v
+    spans.append((start, end, value))
+
+    return spans

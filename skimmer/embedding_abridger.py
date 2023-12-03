@@ -26,8 +26,6 @@ class Method(Enum):
     SENTENCE_SIMILARITY = 'sentence-similarity'
     SENTENCE_MEAN_OF_SAMPLES = 'sentence-mean-of-samples'
     SENTENCE_ITERATIVE = 'sentence-iterative'
-    SENTENCE_SUMMARY_MATCHING = 'sentence-summary-matching'
-    CLAUSE_SUMMARY_MATCHING = 'clause-summary-matching'
 
     @classmethod
     def default(cls) -> 'Method':
@@ -40,35 +38,6 @@ class Method(Enum):
                 return m
         raise Exception(f"Unknown {cls.__name__} '{s}'")
 
-
-class SummaryMatchingAbridger(Abridger):
-    def __init__(self,
-                 parser: Parser,
-                 embed: Callable[[list[str]], np.ndarray[float]],
-                 summarize: Callable[[str], str]):
-        self.parser = parser
-        self.embed = embed
-        self.summarize = summarize
-
-    def __call__(self, doc: str) -> list[ScoredSpan]:
-        sent_parses = list(self.parser.parse(doc))
-        sent_embeddings = self.embed([sent.text for sent in sent_parses])
-
-        summary = self.summarize(doc)
-
-        scores = np.zeros(len(sent_parses))
-        summary_parses = self.parser.parse(summary)
-        summary_embed = self.embed([parse.text for parse in summary_parses])
-        for i in range(len(summary_embed)):
-            # For each sentence i, add cosine similarity between this sentence's embedding and
-            # sent_embeddings[i] to scores[i].
-            # print(sent_embeddings @ summary_embed[i])
-            scores += sent_embeddings @ summary_embed[i]
-
-        scores /= len(sent_parses)
-
-        return [ScoredSpan(start=sent_parse.start, end=sent_parse.end, score=score)
-                for sent_parse, score in zip(sent_parses, scores)]
 
 class EmbeddingAbridger(Abridger):
     def __init__(self,
@@ -289,6 +258,7 @@ class OpenAIEmbedding:
     def uncached_embed(model: str, texts: list[str]) -> np.ndarray[float]:
         results = []
         for batch in batched(texts, 100):
+            logger.debug("Getting embeddings for %s", batch)
             response = OpenAIEmbedding.client.embeddings.create(model=model, input=batch)
             # TODO error checking
             results.extend(d.embedding for d in response.data)
@@ -333,10 +303,7 @@ def score_to_html(doc, method, chunk_size, summary_override):
         summarize = lambda _: summary_override
     else:
         summarize = OpenAISummarizer(memory=memory)
-    if method == Method.SENTENCE_SUMMARY_MATCHING:
-        abridger = SummaryMatchingAbridger(parser, embed, summarize)
-    else:
-        abridger = EmbeddingAbridger(method, chunk_size, parser, embed, summarize)
+    abridger = EmbeddingAbridger(method, chunk_size, parser, embed, summarize)
     spans = abridger(doc)
     with tempfile.NamedTemporaryFile('w', suffix='.html', delete=False) as f:
         print(f"Saving HTML output to: {f.name}")
