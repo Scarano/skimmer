@@ -127,7 +127,7 @@ class SummaryMatchingClauseAbridger:
         modifiers = [i
             for i, r in enumerate(parse.relations)
             if SummaryMatchingClauseAbridger.MODIFIER_PATTERN.fullmatch(r)
-                and len(parse.constituents[i]) > SummaryMatchingClauseAbridger.MIN_MODIFIER_LENGTH]
+                and len(parse.constituents[i]) >= SummaryMatchingClauseAbridger.MIN_MODIFIER_LENGTH]
         top_modifiers = sorted(modifiers, key=lambda i: -len(parse.constituents[i]))[:self.max_removals]
 
         # combos is power set of modifiers to be considered for removal
