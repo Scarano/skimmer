@@ -13,7 +13,7 @@ from openai import OpenAI
 import tiktoken
 
 from skimmer.abridger import ScoredSpan, Abridger
-from skimmer.parser import Parser, DepParse
+from skimmer.parser import DepParse, RightBranchingParser, Parser
 from skimmer.util import abbrev, batched
 
 logger = logging.getLogger(__name__)
@@ -107,7 +107,7 @@ class EmbeddingAbridger(Abridger):
         """
         sent_scores = []
         for s, sent_parse in enumerate(sent_parses):
-            logger.info("Getting embeddings with sentence %s omitted...", s)
+            # logger.info("Getting embeddings with sentence %s omitted...", s)
             doc_minus_s = '\n'.join(p.text for p in sent_parses[:s] + sent_parses[s+1:])
             doc_minus_s_embedding = self.embed([doc_minus_s])[0]
             sent_scores.append(math.log(1.0 - np.dot(doc_target, doc_minus_s_embedding)))
@@ -296,7 +296,8 @@ def score_to_html(doc, method, chunk_size, summary_override):
         generating one. Only for testing purposes. And only for when doc has fewer than
         `chunk_size` sentences.
     """
-    parser = Parser('en')
+    # parser = Parser('en')
+    parser = RightBranchingParser('en')
     memory = joblib.Memory('cache', mmap_mode='c', verbose=0)
     embed = OpenAIEmbedding(memory=memory)
     if summary_override:

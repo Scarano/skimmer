@@ -13,7 +13,7 @@ import joblib
 
 from skimmer.abridger import Abridger, ScoredSpan
 from skimmer.embedding_abridger import OpenAIEmbedding, OpenAISummarizer
-from skimmer.parser import Parser, DepParse
+from skimmer.parser import Parser, StanzaParser, DepParse, RightBranchingParser
 from skimmer.util import equal_spans
 
 logger = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ class SummaryMatchingClauseAbridger:
     MODIFIER_PATTERN = re.compile('|'.join(MODIFIER_TYPES) + '.*', re.IGNORECASE)
 
     def __init__(self,
-                 parser: Parser,
+                 parser: StanzaParser,
                  embed: Callable[[list[str]], np.ndarray[float]],
                  summarize: Callable[[str], str],
                  max_removals: int = 3):
@@ -171,13 +171,14 @@ def score_to_html(doc, method):
     :param doc: Document to abridge
     :param method: Method to use for abridging
     """
-    parser = Parser('en')
     memory = joblib.Memory('cache', mmap_mode='c', verbose=0)
     embed = OpenAIEmbedding(memory=memory)
     summarize = OpenAISummarizer(memory=memory)
     if method == Method.SENTENCE_SUMMARY_MATCHING:
+        parser = RightBranchingParser('en')
         abridger = SummaryMatchingAbridger(parser, embed, summarize)
     elif method == Method.CLAUSE_SUMMARY_MATCHING:
+        parser = StanzaParser('en')
         abridger = SummaryMatchingClauseAbridger(parser, embed, summarize)
     else:
         raise Exception(f"invalid method: {method}")

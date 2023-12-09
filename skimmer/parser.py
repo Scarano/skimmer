@@ -1,4 +1,5 @@
 import logging
+from abc import ABC
 from dataclasses import dataclass
 from pprint import pprint
 from typing import Iterable, TypeVar, Generator
@@ -83,7 +84,13 @@ class DepParse:
                     for i, j in contiguous_spans(included_tokens)]
 
 
-class Parser:
+class Parser(ABC):
+    def parse(self, text: str) -> Generator[DepParse, None, None]:
+        pass
+
+
+class StanzaParser(Parser):
+
     def __init__(self, language: str):
         # This includes mwt (multi-word tokenization) because some languages require it.
         # For English, though, it just results in a warning.
@@ -128,45 +135,77 @@ class Parser:
                 [sorted(constituent_map[i]) for i in range(len(sentence.words))]
             )
 
-def demo():
-    # text = "When he first met the FTX founder Sam Bankman-Fried in late 2021, he took the " \
-    #        "cargo-shorted chief executive on a walk through the eucalyptus trees near his " \
-    #        "Berkeley, Calif., home."
-    text = (
-        "Moral philosophy, or the science of human nature, may be treated after two different "
-        "manners; each of which has its peculiar merit, and may contribute to the "
-        "entertainment, instruction, and reformation of mankind. The one considers man chiefly "
-        "as born for action; and as influenced in his measures by taste and sentiment; pursuing "
-        "one object, and avoiding another, according to the value which these objects seem to "
-        "possess, and according to the light in which they present themselves. As virtue, of all "
-        "objects, is allowed to be the most valuable, this species of philosophers paint her in "
-        "the most amiable colours; borrowing all helps from poetry and eloquence, and treating "
-        "their subject in an easy and obvious manner, and such as is best fitted to please the "
-        "imagination, and engage the affections. They select the most striking observations and "
-        "instances from common life; place opposite characters in a proper contrast; and alluring "
-        "us into the paths of virtue by the views of glory and happiness, direct our steps in "
-        "these paths by the soundest precepts and most illustrious examples. They make us feel "
-        "the difference between vice and virtue; they excite and regulate our sentiments; and so "
-        "they can but bend our hearts to the love of probity and true honour, they think, that "
-        "they have fully attained the end of all their labours.")
-    text = (
-        "My third maxim was to endeavor always to conquer myself rather than fortune, and change "
-        "my desires rather than the order of the world, and in general, accustom myself to the "
-        "persuasion that, except our own thoughts, there is nothing absolutely in our power; so "
-        "that when we have done our best in things external to us, all wherein we fail of success "
-        "is to be held, as regards us, absolutely impossible: and this single principle seemed to "
-        "me sufficient to prevent me from desiring for the future anything which I could not "
-        "obtain, and thus render me contented; for since our will naturally seeks those objects "
-        "alone which the understanding represents as in some way possible of attainment, it is "
-        "plain, that if we consider all external goods as equally beyond our power, we shall no "
-        "more regret the absence of such goods as seem due to our birth, when deprived of them "
-        "without any fault of ours, than our not possessing the kingdoms of China or Mexico, and "
-        "thus making, so to speak, a virtue of necessity, we shall no more desire health in "
-        "disease, or freedom in imprisonment, than we now do bodies incorruptible as diamonds, or "
-        "the wings of birds to fly with."
-    )
 
-    parser = Parser('en')
+class RightBranchingParser(Parser):
+    """
+    A degenrate parser that creates a right-branching dependency parse. (But it's still does
+    useful tokenization and sentence-segmentation.)
+
+    This was created as a quick replacement for Parser for cases where I don't actually need
+    real parsing (which turns out to be less useful for this problem than I originally hoped).
+    This way, I don't have to re-write code that uses the DepParse object.
+
+    (If this were production code, a better refactor would be called for.)
+    """
+
+    def __init__(self, language: str):
+        self.pipeline = stanza.Pipeline(language,
+                                        package=None,
+                                        processors={'tokenize': 'spacy'},
+                                        download_method=stanza.DownloadMethod.REUSE_RESOURCES)
+
+    def parse(self, text: str) -> Generator[DepParse, None, None]:
+        doc = self.pipeline(text)
+        for sentence in doc.sentences:
+            yield DepParse(
+                sentence.text,
+                [w.text for w in sentence.words],
+                [(w.parent.start_char, w.parent.end_char) for w in sentence.words],
+                [i - 1 for i in range(len(sentence.words))],
+                ['unknown' for _ in sentence.words],
+                [list(range(i, len(sentence.words))) for i in range(len(sentence.words))]
+            )
+
+
+def demo():
+    text = "When he first met the FTX founder Sam Bankman-Fried in late 2021, he took the " \
+           "cargo-shorted chief executive on a walk through the eucalyptus trees near his " \
+           "Berkeley, Calif., home."
+    # text = (
+    #     "Moral philosophy, or the science of human nature, may be treated after two different "
+    #     "manners; each of which has its peculiar merit, and may contribute to the "
+    #     "entertainment, instruction, and reformation of mankind. The one considers man chiefly "
+    #     "as born for action; and as influenced in his measures by taste and sentiment; pursuing "
+    #     "one object, and avoiding another, according to the value which these objects seem to "
+    #     "possess, and according to the light in which they present themselves. As virtue, of all "
+    #     "objects, is allowed to be the most valuable, this species of philosophers paint her in "
+    #     "the most amiable colours; borrowing all helps from poetry and eloquence, and treating "
+    #     "their subject in an easy and obvious manner, and such as is best fitted to please the "
+    #     "imagination, and engage the affections. They select the most striking observations and "
+    #     "instances from common life; place opposite characters in a proper contrast; and alluring "
+    #     "us into the paths of virtue by the views of glory and happiness, direct our steps in "
+    #     "these paths by the soundest precepts and most illustrious examples. They make us feel "
+    #     "the difference between vice and virtue; they excite and regulate our sentiments; and so "
+    #     "they can but bend our hearts to the love of probity and true honour, they think, that "
+    #     "they have fully attained the end of all their labours.")
+    # text = (
+    #     "My third maxim was to endeavor always to conquer myself rather than fortune, and change "
+    #     "my desires rather than the order of the world, and in general, accustom myself to the "
+    #     "persuasion that, except our own thoughts, there is nothing absolutely in our power; so "
+    #     "that when we have done our best in things external to us, all wherein we fail of success "
+    #     "is to be held, as regards us, absolutely impossible: and this single principle seemed to "
+    #     "me sufficient to prevent me from desiring for the future anything which I could not "
+    #     "obtain, and thus render me contented; for since our will naturally seeks those objects "
+    #     "alone which the understanding represents as in some way possible of attainment, it is "
+    #     "plain, that if we consider all external goods as equally beyond our power, we shall no "
+    #     "more regret the absence of such goods as seem due to our birth, when deprived of them "
+    #     "without any fault of ours, than our not possessing the kingdoms of China or Mexico, and "
+    #     "thus making, so to speak, a virtue of necessity, we shall no more desire health in "
+    #     "disease, or freedom in imprisonment, than we now do bodies incorruptible as diamonds, or "
+    #     "the wings of birds to fly with."
+    # )
+
+    parser = StanzaParser('en')
 
     parses = parser.parse(text)
 
