@@ -7,3 +7,4 @@ stanza==1.6.1
 tiktoken==0.5.1
 PyYAML==6.0.1
 spacy==3.7.2
+fastapi==0.104.1
