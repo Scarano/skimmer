@@ -7,6 +7,7 @@ import webbrowser
 from enum import Enum
 from itertools import combinations, groupby
 import numpy as np
+import numpy.typing as npt
 from typing import Callable, IO
 
 import joblib
@@ -39,7 +40,7 @@ class Method(Enum):
 class SummaryMatchingAbridger(Abridger):
     def __init__(self,
                  parser: Parser,
-                 embed: Callable[[list[str]], np.ndarray[float]],
+                 embed: Callable[[list[str]], npt.NDArray[np.float_]],
                  summarize: Callable[[str], str]):
         self.parser = parser
         self.embed = embed
@@ -76,7 +77,7 @@ class SummaryMatchingClauseAbridger:
 
     def __init__(self,
                  parser: StanzaParser,
-                 embed: Callable[[list[str]], np.ndarray[float]],
+                 embed: Callable[[list[str]], npt.NDArray[np.float_]],
                  summarize: Callable[[str], str],
                  max_removals: int = 3):
         self.parser = parser
