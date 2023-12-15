@@ -1,24 +1,14 @@
-import argparse
 import logging
 import re
-import sys
-import tempfile
-import webbrowser
 from enum import Enum
 from itertools import combinations, groupby
 import numpy as np
 import numpy.typing as npt
 from typing import Callable, IO
 
-import joblib
-
-from skimmer.abridger import Abridger, ScoredSpan
-from skimmer.embedding_abridger import OpenAIEmbedding, OpenAISummarizer
-from skimmer.parser import Parser, StanzaParser, DepParse, RightBranchingParser
+from skimmer.span_scorer import SpanScorer, ScoredSpan
+from skimmer.parser import Parser, StanzaParser, DepParse
 from skimmer.util import equal_spans
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 class Method(Enum):
@@ -37,7 +27,7 @@ class Method(Enum):
         raise Exception(f"Unknown {cls.__name__} '{s}'")
 
 
-class SummaryMatchingAbridger(Abridger):
+class SummaryMatchingScorer(SpanScorer):
     def __init__(self,
                  parser: Parser,
                  embed: Callable[[list[str]], npt.NDArray[np.float_]],
@@ -165,53 +155,4 @@ def scored_spans_as_html(doc: str, spans: list[ScoredSpan], f: IO):
         f.write(f'<span style="background-color: rgb({",".join(rgb)});">')
         f.write(f'{span_text} [{span.score:.3f}] ')
         f.write('</span>')
-
-def score_to_html(doc, method):
-    """
-    Do a demo run of the EmbeddingAbridger on a single doc.
-    :param doc: Document to abridge
-    :param method: Method to use for abridging
-    """
-    memory = joblib.Memory('cache', mmap_mode='c', verbose=0)
-    embed = OpenAIEmbedding(memory=memory)
-    summarize = OpenAISummarizer(memory=memory)
-    if method == Method.SENTENCE_SUMMARY_MATCHING:
-        parser = RightBranchingParser('en')
-        abridger = SummaryMatchingAbridger(parser, embed, summarize)
-    elif method == Method.CLAUSE_SUMMARY_MATCHING:
-        parser = StanzaParser('en')
-        abridger = SummaryMatchingClauseAbridger(parser, embed, summarize)
-    else:
-        raise Exception(f"invalid method: {method}")
-
-    spans = abridger(doc)
-    with tempfile.NamedTemporaryFile('w', suffix='.html', delete=False) as f:
-        print(f"Saving HTML output to: {f.name}")
-        scored_spans_as_html(doc, spans, f)
-        webbrowser.open('file://' + f.name, new=2)
-        # input('Press enter to complete and delete temp file.')
-
-
-def demo():
-    # Parse arguments
-    parser = argparse.ArgumentParser(description='Abridger')
-    parser.add_argument('doc', type=str, help='Path to document to abridge')
-    parser.add_argument('--method', type=str, default=Method.default().value,
-                         choices=[m.value for m in Method],
-                         help='Method to use for abridging')
-    args = parser.parse_args()
-
-    method = Method.of(parser.parse_args().method)
-
-    with open(args.doc) as f:
-        doc = f.read()
-    score_to_html(doc, method)
-
-    return 0
-
-
-if __name__=='__main__':
-    logging.basicConfig(level=logging.WARN, format='%(asctime)s %(levelname)s: %(message)s')
-
-    sys.exit(demo())
 

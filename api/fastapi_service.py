@@ -7,14 +7,14 @@ import numpy as np
 from skimmer.abridger import ScoredSpan
 from skimmer.embedding_abridger import OpenAIEmbedding, OpenAISummarizer
 from skimmer.parser import RightBranchingParser
-from skimmer.summary_matching_abridger import SummaryMatchingAbridger
+from skimmer.summary_matching_abridger import SummaryMatchingScorer
 
 
 memory = joblib.Memory('cache', mmap_mode='c', verbose=0)
 embed = OpenAIEmbedding(memory=memory)
 summarize = OpenAISummarizer(memory=memory)
 parser = RightBranchingParser('en')
-abridger = SummaryMatchingAbridger(parser, embed, summarize)
+abridger = SummaryMatchingScorer(parser, embed, summarize)
 
 
 app = FastAPI()

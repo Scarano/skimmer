@@ -10,6 +10,6 @@ class ScoredSpan(BaseModel):
     score: float
 
 
-class Abridger(ABC):
+class SpanScorer(ABC):
     def __call__(self, doc: str) -> list[ScoredSpan]:
         pass

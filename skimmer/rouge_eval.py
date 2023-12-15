@@ -7,11 +7,10 @@ from typing import Iterable
 import sys
 from pyrouge import Rouge155
 
+from skimmer import logger
 from skimmer.cnn_dm import CNN_DM
 from skimmer.eval_common import ReferenceSummarySet
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 
 def rouge_eval(ref_summary_sets: Iterable[ReferenceSummarySet], candidate_summaries: Iterable[str]):
@@ -53,7 +52,7 @@ def main(raw_args):
     parser = argparse.ArgumentParser(description='Evaluate ROUGE')
     parser.add_argument('--cnndm-dir', type=str,
                         help='Path to CNN/DailyMail dataset')
-    parser.add_argument('--filter', type=float, default=1.0,
+    parser.add_argument('--subset', type=float, default=1.0,
                         help='Proportion of test data to include')
     parser.add_argument('--work-dir', type=str,
                         help='Path to working directory')
@@ -61,7 +60,7 @@ def main(raw_args):
     args = parser.parse_args(raw_args)
 
     cnn_dm = CNN_DM(args.cnn_dm_dir)
-    ref_summary_sets = cnn_dm.read(CNN_DM.DataSplit.TEST, filter=args.filter)
+    ref_summary_sets = cnn_dm.read(CNN_DM.DataSplit.TEST, subset=args.subset)
 
 
 if __name__ == '__main__':
