@@ -1,6 +1,5 @@
 import logging
 import math
-from enum import Enum
 from typing import Callable
 
 import numpy as np
@@ -9,10 +8,10 @@ import numpy.typing as npt
 from skimmer import logger
 from skimmer.span_scorer import ScoredSpan, SpanScorer
 from skimmer.parser import DepParse, Parser
-from skimmer.util import batched
+from skimmer.util import IndexedEnum, batched_adaptive
 
 
-class Method(Enum):
+class Method(IndexedEnum):
     SENTENCE_COMPLEMENT = 'sentence-complement'
     SENTENCE_SUMMARY_COMPLEMENT = 'sentence-summary-complement'
     SENTENCE_SIMILARITY = 'sentence-similarity'
@@ -23,12 +22,6 @@ class Method(Enum):
     def default(cls) -> 'Method':
         return Method.SENTENCE_SUMMARY_COMPLEMENT
 
-    @classmethod
-    def of(cls, s: str):
-        for m in cls:
-            if m.value == s:
-                return m
-        raise Exception(f"Unknown {cls.__name__} '{s}'")
 
 
 class EmbeddingScorer(SpanScorer):
@@ -56,7 +49,7 @@ class EmbeddingScorer(SpanScorer):
         sent_parses = list(self.parser.parse(doc.strip()))
 
         scored_spans = []
-        for chunk in batched(sent_parses, self.chunk_size):
+        for chunk in batched_adaptive(sent_parses, self.chunk_size):
             chunk_str = '\n'.join(sent.text for sent in chunk)
 
             if self.method in [Method.SENTENCE_SUMMARY_COMPLEMENT]:
@@ -99,13 +92,12 @@ class EmbeddingScorer(SpanScorer):
         we currently take the log of that.
         TODO: Look at score distributions to decide if it really makes sense to take the log.
         """
-        sent_scores = []
+        ablated_docs = []
         for s, sent_parse in enumerate(sent_parses):
-            # logger.info("Getting embeddings with sentence %s ('%s') omitted...",
-            #             s, sent_parse.text)
-            doc_minus_s = '\n'.join(p.text for p in sent_parses[:s] + sent_parses[s+1:])
-            doc_minus_s_embedding = self.embed([doc_minus_s])[0]
-            sent_scores.append(math.log(1.0 - np.dot(doc_target, doc_minus_s_embedding)))
+            ablated_docs.append('\n'.join(p.text for p in sent_parses[:s] + sent_parses[s+1:]))
+        ablated_embeddings = self.embed(ablated_docs)
+        sent_scores = [math.log(1.0 - np.dot(doc_target, ablated_embedding))
+                       for ablated_embedding in ablated_embeddings]
 
         return [ScoredSpan(start=sent_parse.start, end=sent_parse.end, score=score)
                 for sent_parse, score in zip(sent_parses, sent_scores)]

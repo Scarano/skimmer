@@ -21,7 +21,7 @@ class OpenAISummarizer:
         Rely strictly on the provided text, without including external information.
     """
         # Your version should be about three quarters of the length of the provided text.
-    MAX_TOKENS = 4000  # TODO: should be based on model choice, not a constant
+    MAX_TOKENS = 2000  # TODO: should be based on model choice, not a constant
 
     client = OpenAI()  # TODO: should probably be passed in to constructor
 
@@ -47,14 +47,16 @@ class OpenAISummarizer:
     def uncached_summarize(model, encoding, prompt, text: str) -> str:
         text = text.strip()
 
-        num_tokens = len(encoding.encode(text))
-        if num_tokens > OpenAISummarizer.MAX_TOKENS:
-            raise Exception(
-                f"OpenAISummarizer does not support more than {OpenAISummarizer.MAX_TOKENS} "
-                f"tokens at a time. Provided text ({text[:30]}...) has {num_tokens} tokens.")
+        tokens = encoding.encode(text)
+        if len(tokens) > OpenAISummarizer.MAX_TOKENS:
+            logger.warning(
+                "OpenAISummarizer does not support more than %d "
+                f"tokens at a time. Provided text (%s...) has %d tokens and had to be truncated.",
+                OpenAISummarizer.MAX_TOKENS, text[:30], len(tokens))
+            text = encoding.decode(tokens[:OpenAISummarizer.MAX_TOKENS])
 
         response = OpenAISummarizer.client.chat.completions.create(
-            model=model, max_tokens=num_tokens, temperature=0,
+            model=model, max_tokens=int(len(tokens)*.75), temperature=0,
             messages=[
                 {"role": "system", "content": prompt},
                 {"role": "user", "content": text}
@@ -63,8 +65,8 @@ class OpenAISummarizer:
         # TODO Check finish_reason / errors
         summary = response.choices[0].message.content.strip()
         logger.debug("Summarization response for %s: %s",
-                     abbrev(text, 40),
-                     abbrev( repr(response), 1000))
+                     abbrev(text, 80),
+                     abbrev( summary, 80))
 
         return summary
 

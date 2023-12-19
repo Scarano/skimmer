@@ -27,7 +27,8 @@ class OpenAIEmbedding:
     def uncached_embed(model: str, texts: list[str]) -> npt.NDArray[np.float_]:
         results: List[List[float]] = []
         for batch in batched(texts, 100):
-            logger.debug("Getting embeddings for %s", batch)
+            logger.debug("Getting embeddings for %s strings", len(batch))
+            # logger.debug("Getting embeddings for %s", batch)
             response = OpenAIEmbedding.client.embeddings.create(model=model, input=batch)
             # TODO error checking
             results.extend(d.embedding for d in response.data)

@@ -10,7 +10,7 @@ from skimmer.openai_embedding import OpenAIEmbedding
 from skimmer.openai_summarizer import OpenAISummarizer
 from skimmer.parser import RightBranchingParser, StanzaParser
 from skimmer.summary_matching_scorer import Method, SummaryMatchingScorer, \
-    SummaryMatchingClauseAbridger, scored_spans_as_html
+    SummaryMatchingClauseScorer, scored_spans_as_html
 
 
 def score_to_html(doc, method):
@@ -24,14 +24,14 @@ def score_to_html(doc, method):
     summarize = OpenAISummarizer(memory=memory)
     if method == Method.SENTENCE_SUMMARY_MATCHING:
         parser = RightBranchingParser('en')
-        abridger = SummaryMatchingScorer(parser, embed, summarize)
+        scorer = SummaryMatchingScorer(parser, embed, summarize)
     elif method == Method.CLAUSE_SUMMARY_MATCHING:
         parser = StanzaParser('en')
-        abridger = SummaryMatchingClauseAbridger(parser, embed, summarize)
+        scorer = SummaryMatchingClauseScorer(parser, embed, summarize)
     else:
         raise Exception(f"invalid method: {method}")
 
-    spans = abridger(doc)
+    spans = scorer(doc)
     with tempfile.NamedTemporaryFile('w', suffix='.html', delete=False) as f:
         logger.info(f"Saving HTML output to: {f.name}")
         scored_spans_as_html(doc, spans, f)

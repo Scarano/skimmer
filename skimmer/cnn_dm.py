@@ -1,20 +1,21 @@
 import itertools
 import os
-from enum import Enum
 from typing import Optional, Generator, Iterator
 import csv
 
 import sys
 
 from skimmer.eval_common import ReferenceSummarySet
+from skimmer.util import IndexedEnum
 
 
 class CNN_DM:
 
-    class DataSplit(Enum):
+    class DataSplit(IndexedEnum):
         TEST = 'test'
         TRAIN = 'train'
         VALIDATION = 'validation'
+
 
     def __init__(self, data_dir: str):
         self.data_dir = data_dir

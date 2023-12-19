@@ -1,6 +1,5 @@
 import logging
 import re
-from enum import Enum
 from itertools import combinations, groupby
 import numpy as np
 import numpy.typing as npt
@@ -8,23 +7,16 @@ from typing import Callable, IO
 
 from skimmer.span_scorer import SpanScorer, ScoredSpan
 from skimmer.parser import Parser, StanzaParser, DepParse
-from skimmer.util import equal_spans
+from skimmer.util import equal_spans, IndexedEnum
 
 
-class Method(Enum):
+class Method(IndexedEnum):
     SENTENCE_SUMMARY_MATCHING = 'sentence-summary-matching'
     CLAUSE_SUMMARY_MATCHING = 'clause-summary-matching'
 
     @classmethod
     def default(cls) -> 'Method':
         return Method.CLAUSE_SUMMARY_MATCHING
-
-    @classmethod
-    def of(cls, s: str):
-        for m in cls:
-            if m.value == s:
-                return m
-        raise Exception(f"Unknown {cls.__name__} '{s}'")
 
 
 class SummaryMatchingScorer(SpanScorer):
@@ -59,7 +51,7 @@ class SummaryMatchingScorer(SpanScorer):
                 for sent_parse, score in zip(sent_parses, scores)]
 
 
-class SummaryMatchingClauseAbridger:
+class SummaryMatchingClauseScorer:
     MIN_MODIFIER_LENGTH = 3
     MODIFIER_TYPES = \
         'acl advcl advmod amod appos det iobj nmod nummod nummod obl reparandum vocative '.split()
@@ -69,10 +61,12 @@ class SummaryMatchingClauseAbridger:
                  parser: StanzaParser,
                  embed: Callable[[list[str]], npt.NDArray[np.float_]],
                  summarize: Callable[[str], str],
+                 length_penalty: float = 1.0,
                  max_removals: int = 3):
         self.parser = parser
         self.embed = embed
         self.summarize = summarize
+        self.length_penalty = length_penalty
         self.max_removals = max_removals
 
     def __call__(self, doc: str) -> list[ScoredSpan]:
@@ -98,10 +92,14 @@ class SummaryMatchingClauseAbridger:
             var_scores += sent_embeddings @ summary_embed[i]
         var_scores /= len(summary_embed)
 
+        var_lengths = np.array([float(len(var)) for var in variations])
+        var_scores *= var_lengths ** -self.length_penalty
+
         scored_spans = []
         for s, var_pairs in groupby(zip(variations, var_scores), key=lambda pair: pair[0][0]):
             token_max_scores = np.zeros(len(sent_parses[s]))
             for (_, v), score in var_pairs:
+
                 # logger.info("%f.3: %s", score, self.substring(doc, sent_parses[s], v))
                 for i in v:
                     if score > token_max_scores[i]:
@@ -116,9 +114,9 @@ class SummaryMatchingClauseAbridger:
 
     def generate_sentence_variations(self, parse: DepParse) -> list[list[int]]:
         modifiers = [i
-            for i, r in enumerate(parse.relations)
-            if SummaryMatchingClauseAbridger.MODIFIER_PATTERN.fullmatch(r)
-                and len(parse.constituents[i]) >= SummaryMatchingClauseAbridger.MIN_MODIFIER_LENGTH]
+                     for i, r in enumerate(parse.relations)
+                     if SummaryMatchingClauseScorer.MODIFIER_PATTERN.fullmatch(r)
+                     and len(parse.constituents[i]) >= SummaryMatchingClauseScorer.MIN_MODIFIER_LENGTH]
         top_modifiers = sorted(modifiers, key=lambda i: -len(parse.constituents[i]))[:self.max_removals]
 
         # combos is power set of modifiers to be considered for removal
