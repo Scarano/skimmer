@@ -2,22 +2,30 @@ import argparse
 import logging
 import os
 import tempfile
-from typing import Iterable
+from typing import Iterable, Optional
 
 import sys
 
 import random
+
+import wandb
+import yaml
 from pyrouge import Rouge155
 from tqdm import tqdm
 
-from skimmer import logger
+from skimmer import logger, experiment_context
 from skimmer.cnn_dm import CNN_DM
 from skimmer.config import build_config_dict
 from skimmer.eval_common import ReferenceSummarySet
 from skimmer.abridger_builder import build_abridger_from_config
+from skimmer.experiment_context import ExperimentContext
 
 
-def rouge_eval(ref_summary_sets: Iterable[ReferenceSummarySet], candidate_summaries: Iterable[str]):
+PROJECT_NAME='skimmer'
+
+
+def rouge_eval(ref_summary_sets: Iterable[ReferenceSummarySet],
+               candidate_summaries: Iterable[str]):
 
     with tempfile.TemporaryDirectory() as temp_dir:
 
@@ -42,7 +50,7 @@ def rouge_eval(ref_summary_sets: Iterable[ReferenceSummarySet], candidate_summar
                 f.write(candidate_summary)
 
         rouge = Rouge155()
-        rouge.log.setLevel(logging.DEBUG)
+        rouge.log.setLevel(logging.WARNING)
         rouge.model_dir = reference_dir
         rouge.system_dir = candidate_dir
         rouge.model_filename_pattern = 'ref.#ID#.txt'
@@ -52,6 +60,51 @@ def rouge_eval(ref_summary_sets: Iterable[ReferenceSummarySet], candidate_summar
         results_dict = rouge.output_to_dict(rouge_results)
 
         return results_dict
+
+
+def wandb_rouge_eval(context: ExperimentContext, config: Optional[dict] = None):
+    run = wandb.init(project=PROJECT_NAME,
+                     group=context.experiment_name,
+                     job_type=f"ROUGE-{context.dataset_split}",
+                     # name=context.start,
+                     config=config,
+                     save_code=True,
+                     allow_val_change=False,
+                     dir=context.work_dir)
+
+    with run:
+        # When run by wandb agent, we get the config from wandb
+        if config is None:
+            config = run.config
+
+        abridger = build_abridger_from_config(config, context.work_dir)
+
+        cnn_dm_dir = CNN_DM(context.dataset_dir)
+        split = CNN_DM.DataSplit.of(context.dataset_split)
+        ref_summary_sets = list(cnn_dm_dir.read(split, subset=context.dataset_subset))
+        # shuffle the order of the ref_summary_sets so that parallel runs
+        # process and cache results for different documents.
+        random.shuffle(ref_summary_sets)
+        logger.info("Loaded %d docs....", len(ref_summary_sets))
+
+        summaries = []
+        for ref_summary in tqdm(ref_summary_sets):
+            summaries.append(abridger.abridge(ref_summary.doc))
+
+        wandb.log(rouge_eval(ref_summary_sets, summaries))
+
+
+def start_sweep(context: ExperimentContext, sweep_config_path: str):
+    with open(sweep_config_path, 'r') as f:
+        sweep_config = yaml.safe_load(f)
+    sweep_id = wandb.sweep(sweep_config, project=PROJECT_NAME)
+    logger.info('Starting sweep ID %s', sweep_id)
+
+    wandb.agent(sweep_id, lambda: wandb_rouge_eval(context))
+
+
+def resume_sweep(context: ExperimentContext, sweep_id: str):
+    wandb.agent(sweep_id, lambda: wandb_rouge_eval(context), project=PROJECT_NAME)
 
 
 def main(raw_args):
@@ -68,26 +121,30 @@ def main(raw_args):
                         help='Dataset split to use (test or validation)')
     parser.add_argument('--subset', type=float, default=1.0,
                         help='Proportion of test data to include')
+    parser.add_argument('--sweep', type=str, default=None,
+                        help='Perform W&B hyperparameter sweep using specified config yaml. '
+                             'Ignores --config and --overrides.')
+    parser.add_argument('--resume-sweep', type=str, default=None,
+                        help='Resume W&B hyperparameter sweep using specified sweep ID.')
     args = parser.parse_args(raw_args)
 
-    config = build_config_dict(args.config, args.override)
+    context = experiment_context.make_experiment_context(
+        args.work_dir,
+        args.cnn_dm_dir,
+        'CNN/DM',
+        args.split,
+        args.subset)
 
-    abridger = build_abridger_from_config(config, args.work_dir)
+    wandb.login()
 
-    cnn_dm_dir = CNN_DM(args.cnn_dm_dir)
-    split = CNN_DM.DataSplit.of(args.split)
-    ref_summary_sets = list(cnn_dm_dir.read(split, subset=args.subset))
-    # shuffle the order of the ref_summary_sets so that parallel runs
-    # process and cache results for different documents.
-    random.shuffle(ref_summary_sets)
-    logger.info("Loaded %d docs....", len(ref_summary_sets))
+    if args.sweep:
+        start_sweep(context, args.sweep)
+    elif args.resume_sweep:
+        resume_sweep(context, args.resume_sweep)
+    else:
+        config = build_config_dict(args.config, args.override)
 
-    summaries = []
-    for ref_summary in tqdm(ref_summary_sets):
-        summaries.append(abridger.abridge(ref_summary.doc))
-
-    print(rouge_eval(ref_summary_sets, summaries))
-
+        wandb_rouge_eval(context, config)
 
 if __name__ == '__main__':
     main(sys.argv[1:])

@@ -1,0 +1,19 @@
+method: bayes
+metric:
+  name: rouge_1_f_score
+  goal: maximize
+parameters:
+  method:
+    value:
+      clause-summary-matching
+  summary:
+    value: openai
+  embedding:
+    value: openai
+  abridge-threshold:
+    min: 0.05
+    max: 0.4
+  length-penalty:
+    min: -8
+    max: -2
+    distribution: log_uniform
