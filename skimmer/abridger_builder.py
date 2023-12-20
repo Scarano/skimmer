@@ -80,7 +80,9 @@ def build_scorer_from_config(config: dict, work_dir: str):
 
             case summary_matching_scorer.Method.CLAUSE_SUMMARY_MATCHING:
 
-                parser = StanzaParser('en')
+                parse_cache_path = os.path.join(work_dir, f'parse_cache')
+                parse_memory = joblib.Memory(parse_cache_path, mmap_mode='c', verbose=0)
+                parser = StanzaParser('en', parse_memory)
                 length_penalty = config.get(CONFIG_LENGTH_PENALTY, CONFIG_LENGTH_PENALTY_DEFAULT)
                 return SummaryMatchingClauseScorer(parser, embed, summarize, length_penalty)
 

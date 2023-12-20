@@ -5,6 +5,8 @@ import tempfile
 from typing import Iterable
 
 import sys
+
+import random
 from pyrouge import Rouge155
 from tqdm import tqdm
 
@@ -75,6 +77,9 @@ def main(raw_args):
     cnn_dm_dir = CNN_DM(args.cnn_dm_dir)
     split = CNN_DM.DataSplit.of(args.split)
     ref_summary_sets = list(cnn_dm_dir.read(split, subset=args.subset))
+    # shuffle the order of the ref_summary_sets so that parallel runs
+    # process and cache results for different documents.
+    random.shuffle(ref_summary_sets)
     logger.info("Loaded %d docs....", len(ref_summary_sets))
 
     summaries = []
