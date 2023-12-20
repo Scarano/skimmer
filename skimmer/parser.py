@@ -2,8 +2,9 @@ import logging
 from abc import ABC
 from dataclasses import dataclass
 from pprint import pprint
-from typing import Iterable, TypeVar, Generator
+from typing import Iterable, TypeVar, Optional
 
+import joblib
 import stanza
 
 from skimmer.util import contiguous_spans
@@ -85,13 +86,13 @@ class DepParse:
 
 
 class Parser(ABC):
-    def parse(self, text: str) -> Generator[DepParse, None, None]:
-        pass
+    def parse(self, text: str) -> list[DepParse]:
+        raise NotImplementedError
 
 
 class StanzaParser(Parser):
 
-    def __init__(self, language: str):
+    def __init__(self, language: str, memory: Optional[joblib.Memory] = None):
         # This includes mwt (multi-word tokenization) because some languages require it.
         # For English, though, it just results in a warning.
         self.pipeline = stanza.Pipeline(language,
@@ -102,9 +103,17 @@ class StanzaParser(Parser):
                                                     'depparse': 'default'},
                                         download_method=stanza.DownloadMethod.REUSE_RESOURCES)
 
-    def parse(self, text: str) -> Generator[DepParse, None, None]:
-        parsed_doc = self.pipeline(text)
+        self.parse_func = lambda text: StanzaParser.uncached_parse(self.pipeline, text)
+        if memory:
+            self.parse_func = memory.cache(self.parse_func)
 
+
+    @staticmethod
+    def uncached_parse(pipeline: stanza.Pipeline, text: str) -> list[DepParse]:
+
+        parsed_doc = pipeline(text)
+
+        parses = []
         for sentence in parsed_doc.sentences:
             if not sentence.words:
                 continue
@@ -126,14 +135,20 @@ class StanzaParser(Parser):
 
             # print(sentence.words[0].parent.start_char)
 
-            yield DepParse(
+            parses.append(DepParse(
                 sentence.text,
                 [w.text for w in sentence.words],
                 [(w.parent.start_char, w.parent.end_char) for w in sentence.words],
                 [head_map[i] for i in range(len(sentence.words))],
                 [w.deprel for w in sentence.words],
                 [sorted(constituent_map[i]) for i in range(len(sentence.words))]
-            )
+            ))
+
+        return parses
+
+    def parse(self, text: str) -> list[DepParse]:
+        return self.parse_func(text)
+
 
 
 class RightBranchingParser(Parser):
@@ -154,17 +169,19 @@ class RightBranchingParser(Parser):
                                         processors={'tokenize': 'spacy'},
                                         download_method=stanza.DownloadMethod.REUSE_RESOURCES)
 
-    def parse(self, text: str) -> Generator[DepParse, None, None]:
+    def parse(self, text: str) -> list[DepParse]:
         doc = self.pipeline(text)
+        parses = []
         for sentence in doc.sentences:
-            yield DepParse(
+            parses.append(DepParse(
                 sentence.text,
                 [w.text for w in sentence.words],
                 [(w.parent.start_char, w.parent.end_char) for w in sentence.words],
                 [i - 1 for i in range(len(sentence.words))],
                 ['unknown' for _ in sentence.words],
                 [list(range(i, len(sentence.words))) for i in range(len(sentence.words))]
-            )
+            ))
+        return parses
 
 
 def demo():

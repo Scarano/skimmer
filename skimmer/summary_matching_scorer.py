@@ -92,7 +92,7 @@ class SummaryMatchingClauseScorer:
             var_scores += sent_embeddings @ summary_embed[i]
         var_scores /= len(summary_embed)
 
-        var_lengths = np.array([float(len(var)) for var in variations])
+        var_lengths = np.array([float(len(p)) for _, p in variations])
         var_scores *= var_lengths ** -self.length_penalty
 
         scored_spans = []

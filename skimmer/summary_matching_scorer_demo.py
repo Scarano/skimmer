@@ -1,4 +1,5 @@
 import argparse
+import os
 import tempfile
 import webbrowser
 
@@ -13,21 +14,32 @@ from skimmer.summary_matching_scorer import Method, SummaryMatchingScorer, \
     SummaryMatchingClauseScorer, scored_spans_as_html
 
 
-def score_to_html(doc, method):
+def score_to_html(doc, method, cache_dir, length_penalty=0.0):
     """
     Do a demo run of the EmbeddingAbridger on a single doc.
     :param doc: Document to abridge
     :param method: Method to use for abridging
     """
-    memory = joblib.Memory('cache', mmap_mode='c', verbose=0)
-    embed = OpenAIEmbedding(memory=memory)
-    summarize = OpenAISummarizer(memory=memory)
+    if cache_dir is not None:
+        parse_memory = joblib.Memory(os.path.join(cache_dir, 'parse_cache'),
+                                     mmap_mode='c', verbose=0)
+        embed_memory = joblib.Memory(os.path.join(cache_dir, 'embedding_cache_openai'),
+                                     mmap_mode='c', verbose=0)
+        summarize_memory = joblib.Memory(os.path.join(cache_dir, 'summary_cache_openai'),
+                                         mmap_mode='c', verbose=0)
+    else:
+        parse_memory = None
+        embed_memory = None
+        summarize_memory = None
+    embed = OpenAIEmbedding(memory=embed_memory)
+    summarize = OpenAISummarizer(memory=summarize_memory)
     if method == Method.SENTENCE_SUMMARY_MATCHING:
         parser = RightBranchingParser('en')
         scorer = SummaryMatchingScorer(parser, embed, summarize)
     elif method == Method.CLAUSE_SUMMARY_MATCHING:
-        parser = StanzaParser('en')
-        scorer = SummaryMatchingClauseScorer(parser, embed, summarize)
+        parser = StanzaParser('en', parse_memory)
+        scorer = SummaryMatchingClauseScorer(parser, embed, summarize,
+                                             length_penalty=length_penalty)
     else:
         raise Exception(f"invalid method: {method}")
 
@@ -46,13 +58,15 @@ def demo():
     parser.add_argument('--method', type=str, default=Method.default().value,
                          choices=[m.value for m in Method],
                          help='Method to use for abridging')
+    parser.add_argument('--length-penalty', type=float, default=0.0)
+    parser.add_argument('--cache-dir', type=str)
     args = parser.parse_args()
 
     method = Method.of(parser.parse_args().method)
 
     with open(args.doc) as f:
         doc = f.read()
-    score_to_html(doc, method)
+    score_to_html(doc, method, args.cache_dir, length_penalty=args.length_penalty)
 
     return 0
 

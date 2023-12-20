@@ -35,8 +35,11 @@ class InvalidConfigException(Exception):
 
 def build_scorer_from_config(config: dict, work_dir: str):
 
-    embed_memory = joblib.Memory(os.path.join(work_dir, 'embedding_cache'), mmap_mode='c',
-                                 verbose=0)
+    if CONFIG_EMBEDDING in config:
+        embedding_cache_path = os.path.join(work_dir, f'embedding_cache_{config[CONFIG_EMBEDDING]}')
+        embed_memory = joblib.Memory(embedding_cache_path, mmap_mode='c', verbose=0)
+    else:
+        embed_memory = None
 
     if config.get(CONFIG_EMBEDDING) == CONFIG_EMBEDDING_OPENAI:
         from skimmer.openai_embedding import OpenAIEmbedding
