@@ -28,6 +28,7 @@ class EmbeddingScorer(SpanScorer):
     def __init__(self,
                  method: Method,
                  chunk_size: int,
+                 length_penalty: float,
                  parser: Parser,
                  embedder: Callable[[list[str]], npt.NDArray[np.float_]],
                  summarizer: Callable[[str], str]):
@@ -40,6 +41,7 @@ class EmbeddingScorer(SpanScorer):
         """
         self.method = method
         self.chunk_size = chunk_size
+        self.length_penalty = length_penalty
         self.parser = parser
         self.embed = embedder
         self.summarize = summarizer
@@ -98,6 +100,9 @@ class EmbeddingScorer(SpanScorer):
         ablated_embeddings = self.embed(ablated_docs)
         sent_scores = [math.log(1.0 - cosine_similarity(doc_target, ablated_embedding))
                        for ablated_embedding in ablated_embeddings]
+
+        sent_lengths = np.array([float(len(s)) for s in sent_parses])
+        sent_scores *= sent_lengths ** self.length_penalty
 
         return [ScoredSpan(start=sent_parse.start, end=sent_parse.end, score=score)
                 for sent_parse, score in zip(sent_parses, sent_scores)]

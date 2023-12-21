@@ -1,4 +1,5 @@
 import argparse
+import os
 import tempfile
 import webbrowser
 from typing import IO
@@ -8,6 +9,7 @@ import numpy as np
 import sys
 
 from skimmer.embedding_scorer import EmbeddingScorer, Method
+from skimmer.jina_local_embedding import JinaLocalEmbedding
 from skimmer.openai_embedding import OpenAIEmbedding
 from skimmer.openai_summarizer import OpenAISummarizer
 from skimmer.parser import RightBranchingParser
@@ -33,25 +35,34 @@ def scored_spans_as_html(doc: str, spans: list[ScoredSpan], f: IO):
         f.write('</span>')
 
 
-def score_to_html(doc, method, chunk_size, summary_override):
+def score_to_html(doc, method, cache_dir, chunk_size, length_penalty, summary_override):
     """
     Do a demo run of the EmbeddingScorer on a single doc.
     :param doc: Document to abridge
     :param method: Method to use for abridging
     :param chunk_size: Number of sentences to abridge as a unit
+    :param length_penalty: Scores are divided by sentence lenght to this power
     :param summary_override: If not None, this string will be used as the summary instead of
         generating one. Only for testing purposes. And only for when doc has fewer than
         `chunk_size` sentences.
     """
+    if cache_dir is not None:
+        embed_memory = joblib.Memory(os.path.join(cache_dir, 'embedding_cache_openai'),
+                                     mmap_mode='c', verbose=0)
+        summarize_memory = joblib.Memory(os.path.join(cache_dir, 'summary_cache_openai'),
+                                         mmap_mode='c', verbose=0)
+    else:
+        embed_memory = None
+        summarize_memory = None
     # parser = Parser('en')
     parser = RightBranchingParser('en')
-    memory = joblib.Memory('cache', mmap_mode='c', verbose=0)
-    embed = OpenAIEmbedding(memory=memory)
+    embed = OpenAIEmbedding(memory=embed_memory)
+    # embed = JinaLocalEmbedding(JinaLocalEmbedding.SMALL_MODEL, embed_memory)
     if summary_override:
         summarize = lambda _: summary_override
     else:
-        summarize = OpenAISummarizer(memory=memory)
-    scorer = EmbeddingScorer(method, chunk_size, parser, embed, summarize)
+        summarize = OpenAISummarizer(memory=summarize_memory)
+    scorer = EmbeddingScorer(method, chunk_size, length_penalty, parser, embed, summarize)
     spans = scorer(doc)
     with tempfile.NamedTemporaryFile('w', suffix='.html', delete=False) as f:
         print(f"Saving HTML output to: {f.name}")
@@ -69,8 +80,10 @@ def demo():
                          help='Method to use for abridging')
     parser.add_argument('--chunk-size', type=int, default=20,
                         help='Maximum number of sentences to abridge at once')
+    parser.add_argument('--length-penalty', type=float, default=0.0)
     parser.add_argument('--summary', type=str, default=None,
                         help='Path to target summary used to override generates summary (for testing)')
+    parser.add_argument('--cache-dir', type=str)
     args = parser.parse_args()
 
     method = Method.of(parser.parse_args().method)
@@ -82,7 +95,9 @@ def demo():
     else:
         with open(args.summary) as f:
             summary = f.read()
-    score_to_html(doc, method, args.chunk_size, summary)
+    score_to_html(doc, method, args.cache_dir,
+                  args.chunk_size, length_penalty=args.length_penalty,
+                  summary_override=summary)
 
     return 0
 

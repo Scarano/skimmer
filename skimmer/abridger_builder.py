@@ -64,6 +64,8 @@ def build_scorer_from_config(config: dict, work_dir: str):
 
     method_str = config[CONFIG_METHOD]
 
+    length_penalty = config.get(CONFIG_LENGTH_PENALTY, CONFIG_LENGTH_PENALTY_DEFAULT)
+
     if embedding_scorer.Method.contains_value(method_str):
         method = embedding_scorer.Method.of(method_str)
 
@@ -71,7 +73,7 @@ def build_scorer_from_config(config: dict, work_dir: str):
 
         chunk_size = config.get(CONFIG_CHUNK_SIZE, CONFIG_CHUNK_SIZE_DEFAULT)
 
-        return EmbeddingScorer(method, chunk_size, parser, embed, summarize)
+        return EmbeddingScorer(method, chunk_size, length_penalty, parser, embed, summarize)
 
     elif summary_matching_scorer.Method.contains_value(method_str):
         method = summary_matching_scorer.Method.of(method_str)
@@ -87,7 +89,6 @@ def build_scorer_from_config(config: dict, work_dir: str):
                 parse_cache_path = os.path.join(work_dir, f'parse_cache')
                 parse_memory = joblib.Memory(parse_cache_path, mmap_mode='c', verbose=0)
                 parser = StanzaParser('en', parse_memory)
-                length_penalty = config.get(CONFIG_LENGTH_PENALTY, CONFIG_LENGTH_PENALTY_DEFAULT)
                 return SummaryMatchingClauseScorer(parser, embed, summarize, length_penalty)
 
             case _:
