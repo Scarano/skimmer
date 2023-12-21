@@ -29,7 +29,7 @@ class JinaLocalEmbedding:
     @staticmethod
     def uncached_embed(model, texts: list[str]) -> npt.NDArray[np.float_]:
         results: List[List[float]] = []
-        for batch in batched(texts, 100):
+        for batch in batched(texts, 20):
             logger.debug("Getting embeddings for %s strings", len(batch))
             # logger.debug("Getting embeddings for %s", batch)
             embeddings = model.encode(batch)

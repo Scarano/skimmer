@@ -94,17 +94,17 @@ def wandb_rouge_eval(context: ExperimentContext, config: Optional[dict] = None):
         wandb.log(rouge_eval(ref_summary_sets, summaries))
 
 
-def start_sweep(context: ExperimentContext, sweep_config_path: str):
+def start_sweep(context: ExperimentContext, sweep_config_path: str, max_runs: int):
     with open(sweep_config_path, 'r') as f:
         sweep_config = yaml.safe_load(f)
     sweep_id = wandb.sweep(sweep_config, project=PROJECT_NAME)
     logger.info('Starting sweep ID %s', sweep_id)
 
-    wandb.agent(sweep_id, lambda: wandb_rouge_eval(context))
+    wandb.agent(sweep_id, lambda: wandb_rouge_eval(context), count=max_runs)
 
 
-def resume_sweep(context: ExperimentContext, sweep_id: str):
-    wandb.agent(sweep_id, lambda: wandb_rouge_eval(context), project=PROJECT_NAME)
+def resume_sweep(context: ExperimentContext, sweep_id: str, max_runs: int):
+    wandb.agent(sweep_id, lambda: wandb_rouge_eval(context), project=PROJECT_NAME, count=max_runs)
 
 
 def main(raw_args):
@@ -126,6 +126,7 @@ def main(raw_args):
                              'Ignores --config and --overrides.')
     parser.add_argument('--resume-sweep', type=str, default=None,
                         help='Resume W&B hyperparameter sweep using specified sweep ID.')
+    parser.add_argument('--max-runs', type=int, default=20)
     args = parser.parse_args(raw_args)
 
     context = experiment_context.make_experiment_context(
@@ -138,9 +139,9 @@ def main(raw_args):
     wandb.login()
 
     if args.sweep:
-        start_sweep(context, args.sweep)
+        start_sweep(context, args.sweep, args.max_runs)
     elif args.resume_sweep:
-        resume_sweep(context, args.resume_sweep)
+        resume_sweep(context, args.resume_sweep, args.max_runs)
     else:
         config = build_config_dict(args.config, args.override)
 
