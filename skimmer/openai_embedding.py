@@ -3,10 +3,10 @@ from typing import Optional, List
 import joblib
 import numpy as np
 from numpy import typing as npt
-from openai import OpenAI
+from openai import OpenAI, RateLimitError
 
 from skimmer import logger
-from skimmer.util import batched
+from skimmer.util import batched, with_retry
 
 
 class OpenAIEmbedding:
@@ -29,7 +29,11 @@ class OpenAIEmbedding:
         for batch in batched(texts, 100):
             logger.debug("Getting embeddings for %s strings", len(batch))
             # logger.debug("Getting embeddings for %s", batch)
-            response = OpenAIEmbedding.client.embeddings.create(model=model, input=batch)
+            response = with_retry(
+                lambda: OpenAIEmbedding.client.embeddings.create(model=model, input=batch),
+                RateLimitError,
+                3,
+                10)
             # TODO error checking
             results.extend(d.embedding for d in response.data)
         return np.array(results)

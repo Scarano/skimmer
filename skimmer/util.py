@@ -1,6 +1,7 @@
 from enum import Enum
 from itertools import islice
-from typing import Any, Iterable, TypeVar, Generator
+import time
+from typing import Any, Iterable, TypeVar, Generator, Callable, Type
 
 from numpy.typing import ArrayLike
 
@@ -114,3 +115,16 @@ class IndexedEnum(Enum):
     @classmethod
     def contains_value(cls, s: str) -> bool:
         return any(m.value == s for m in cls)
+
+
+def with_retry(fn: Callable[[], T], transient_exception: Type[BaseException],
+               max_retries: int, pause: float) -> T:
+    try:
+        return fn()
+    except transient_exception as e:
+        if max_retries > 0:
+            time.sleep(pause)
+            return with_retry(fn, transient_exception, max_retries - 1, pause)
+        else:
+            return e
+
