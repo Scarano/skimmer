@@ -28,7 +28,7 @@ class OpenAIEmbedding:
         results: List[List[float]] = []
         for batch in batched(texts, 100):
             logger.debug("Getting embeddings for %s strings", len(batch))
-            # logger.debug("Getting embeddings for %s", batch)
+            # logger.debug("Getting embeddings for: \n%s", '\n'.join(batch))
             response = with_retry(
                 lambda: OpenAIEmbedding.client.embeddings.create(model=model, input=batch),
                 RateLimitError,

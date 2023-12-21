@@ -2,7 +2,6 @@ import joblib
 from fastapi import FastAPI
 from pydantic import BaseModel
 from typing import List
-import numpy as np
 
 from skimmer.abridger import Abridger
 from skimmer.span_scorer import ScoredSpan
@@ -15,7 +14,7 @@ from skimmer.summary_matching_scorer import SummaryMatchingScorer
 
 memory = joblib.Memory('cache', mmap_mode='c', verbose=0)
 embed = OpenAIEmbedding(memory=memory)
-summarize = OpenAISummarizer(memory=memory)
+summarize = OpenAISummarizer(prompt_name='few-points-1', memory=memory)
 parser = RightBranchingParser('en')
 scorer = SummaryMatchingScorer(parser, embed, summarize)
 

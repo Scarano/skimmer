@@ -6,7 +6,7 @@ import webbrowser
 import joblib
 import sys
 
-from skimmer import logger
+from skimmer import logger, openai_summarizer
 from skimmer.openai_embedding import OpenAIEmbedding
 from skimmer.openai_summarizer import OpenAISummarizer
 from skimmer.parser import RightBranchingParser, StanzaParser
@@ -14,7 +14,7 @@ from skimmer.summary_matching_scorer import Method, SummaryMatchingScorer, \
     SummaryMatchingClauseScorer, scored_spans_as_html
 
 
-def score_to_html(doc, method, cache_dir, length_penalty=0.0):
+def score_to_html(doc, method, cache_dir, summarize_prompt: str, length_penalty=0.0):
     """
     Do a demo run of the EmbeddingAbridger on a single doc.
     :param doc: Document to abridge
@@ -32,7 +32,7 @@ def score_to_html(doc, method, cache_dir, length_penalty=0.0):
         embed_memory = None
         summarize_memory = None
     embed = OpenAIEmbedding(memory=embed_memory)
-    summarize = OpenAISummarizer(memory=summarize_memory)
+    summarize = OpenAISummarizer(prompt_name=summarize_prompt, memory=summarize_memory)
     if method == Method.SENTENCE_SUMMARY_MATCHING:
         parser = RightBranchingParser('en')
         scorer = SummaryMatchingScorer(parser, embed, summarize)
@@ -58,6 +58,8 @@ def demo():
     parser.add_argument('--method', type=str, default=Method.default().value,
                          choices=[m.value for m in Method],
                          help='Method to use for abridging')
+    parser.add_argument('--summarize-prompt', type=str, default='v1',
+                        choices=list(openai_summarizer.SUMMARIZE_PROMPTS.keys()))
     parser.add_argument('--length-penalty', type=float, default=0.0)
     parser.add_argument('--cache-dir', type=str)
     args = parser.parse_args()
@@ -66,7 +68,8 @@ def demo():
 
     with open(args.doc) as f:
         doc = f.read()
-    score_to_html(doc, method, args.cache_dir, length_penalty=args.length_penalty)
+    score_to_html(doc, method, args.cache_dir, args.summarize_prompt,
+                  length_penalty=args.length_penalty)
 
     return 0
 

@@ -1,0 +1,21 @@
+method: grid
+metric:
+  name: rouge_1_f_score
+  goal: maximize
+parameters:
+  method:
+    value:
+      lead-baseline
+  abridge-threshold:
+    values:
+#      - 0.05
+#      - 0.1
+#      - 0.15
+#      - 0.2
+      - 1.0
+  abridge-max-sentences:
+    values:
+      - 1
+      - 2
+      - 3
+      - 4

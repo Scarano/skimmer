@@ -7,6 +7,23 @@ from openai import OpenAI
 from skimmer import logger
 from skimmer.util import abbrev
 
+SUMMARIZE_PROMPTS = {
+    'v1': """
+        As a professional abridger, write a slightly shortened version of the provided text.
+        Your version should include all the main ideas and essential information, but eliminate extraneous language, less-important points, redundant information, and redundant examples.
+        It should preserve the style and jargon of the provided text.
+        Rely strictly on the provided text, without including external information.
+    """,
+    'few-points-1': """
+        List the 2 to 4 most important points in the provided article.
+        Rely strictly on the provided article, without including external information.
+        Do not use bullets or numbers. Just put each point on its own line as a bare sentence.
+        In each point, use unambiguous phrases to refer to any people, places, organizations, and
+        other important things. For example, "Coca-Cola CEO James Quincey" instead of just
+        "Quincey".
+    """
+}
+
 
 class OpenAISummarizer:
     """
@@ -14,32 +31,27 @@ class OpenAISummarizer:
     interface with a summarization prompt.
     """
 
-    SUMMARIZE_PROMPT = """
-        As a professional abridger, write a slightly shortened version of the provided text.
-        Your version should include all the main ideas and essential information, but eliminate extraneous language, less-important points, redundant information, and redundant examples.
-        It should preserve the style and jargon of the provided text.
-        Rely strictly on the provided text, without including external information.
-    """
-        # Your version should be about three quarters of the length of the provided text.
+
+    # Your version should be about three quarters of the length of the provided text.
     MAX_TOKENS = 2000  # TODO: should be based on model choice, not a constant
 
     client = OpenAI()  # TODO: should probably be passed in to constructor
 
-    def __init__(self, model: str = 'gpt-3.5-turbo',
+    def __init__(self, model: str = 'gpt-3.5-turbo', prompt_name: str = 'v1',
                  memory: Optional[joblib.Memory] = None):
         """
         :param model: OpenAI model to use for summarization
         :param memory: joblib Memory object to use for caching. If None, no caching will be done.
         """
         self.model = model
+        self.prompt_name = prompt_name
         try:
             self.encoding = tiktoken.encoding_for_model(model)
         except KeyError:
             raise Exception(f"No tiktoken encoding found for model {model}")
 
         self.summarize_func = lambda model, encoding, prompt, text: \
-            OpenAISummarizer.uncached_summarize(
-                model, encoding, prompt, text)
+            OpenAISummarizer.uncached_summarize(model, encoding, prompt, text)
         if memory:
             self.summarize_func = memory.cache(self.summarize_func)
 
@@ -72,4 +84,4 @@ class OpenAISummarizer:
 
     def __call__(self, text: str) -> str:
         return self.summarize_func(
-            self.model, self.encoding, OpenAISummarizer.SUMMARIZE_PROMPT, text)
+            self.model, self.encoding, SUMMARIZE_PROMPTS[self.prompt_name], text)

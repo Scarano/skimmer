@@ -4,14 +4,6 @@ from typing import Optional, Mapping
 import yaml
 
 
-# from pydantic import BaseModel
-#
-#
-# class Config(BaseModel):
-#
-#     threshold: float = 0.5
-
-# Some examples of key=value pairs that match the pattern:
 CONFIG_OVERRIDE_PATTERN = re.compile(r'([^=\s]+)\s*=\s*(.*)')
 
 def build_config_dict(config_file: Optional[str], overrides: dict|list[str]) -> dict:

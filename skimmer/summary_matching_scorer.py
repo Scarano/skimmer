@@ -16,7 +16,7 @@ class Method(IndexedEnum):
 
     @classmethod
     def default(cls) -> 'Method':
-        return Method.CLAUSE_SUMMARY_MATCHING
+        return Method.SENTENCE_SUMMARY_MATCHING
 
 
 class SummaryMatchingScorer(SpanScorer):
@@ -36,7 +36,8 @@ class SummaryMatchingScorer(SpanScorer):
 
         scores = np.zeros(len(sent_parses))
         summary_parses = self.parser.parse(summary)
-        summary_embed = self.embed([parse.text for parse in summary_parses])
+        summary_embed = self.embed([parse.text for parse in summary_parses
+                                               if len(parse.text) >= 4]) # exclude occasional debris
         for i in range(len(summary_embed)):
             # For each sentence i, add cosine similarity between this sentence's embedding and
             # sent_embeddings[i] to scores[i].
