@@ -126,5 +126,4 @@ def with_retry(fn: Callable[[], T], transient_exception: Type[BaseException],
             time.sleep(pause)
             return with_retry(fn, transient_exception, max_retries - 1, pause)
         else:
-            return e
-
+            raise e

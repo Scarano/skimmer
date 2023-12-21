@@ -14,6 +14,7 @@ CONFIG_METHOD = 'method'
 
 CONFIG_EMBEDDING = 'embedding'
 CONFIG_EMBEDDING_OPENAI = 'openai'
+CONFIG_EMBEDDING_JINA_LOCAL_SMALL = 'jina-local-small'
 
 CONFIG_SUMMARY = 'summary'
 CONFIG_SUMMARY_OPENAI = 'openai'
@@ -44,6 +45,9 @@ def build_scorer_from_config(config: dict, work_dir: str):
     if config.get(CONFIG_EMBEDDING) == CONFIG_EMBEDDING_OPENAI:
         from skimmer.openai_embedding import OpenAIEmbedding
         embed = OpenAIEmbedding(memory=embed_memory)
+    elif config.get(CONFIG_EMBEDDING) == CONFIG_EMBEDDING_JINA_LOCAL_SMALL:
+        from skimmer.jina_local_embedding import JinaLocalEmbedding
+        embed = JinaLocalEmbedding(JinaLocalEmbedding.SMALL_MODEL)
     else:
         raise InvalidConfigException(config, CONFIG_EMBEDDING)
 

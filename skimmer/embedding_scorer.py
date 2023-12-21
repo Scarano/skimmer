@@ -96,7 +96,7 @@ class EmbeddingScorer(SpanScorer):
         for s, sent_parse in enumerate(sent_parses):
             ablated_docs.append('\n'.join(p.text for p in sent_parses[:s] + sent_parses[s+1:]))
         ablated_embeddings = self.embed(ablated_docs)
-        sent_scores = [math.log(1.0 - np.dot(doc_target, ablated_embedding))
+        sent_scores = [math.log(1.0 - cosine_similarity(doc_target, ablated_embedding))
                        for ablated_embedding in ablated_embeddings]
 
         return [ScoredSpan(start=sent_parse.start, end=sent_parse.end, score=score)
@@ -162,3 +162,5 @@ class EmbeddingScorer(SpanScorer):
         return [ScoredSpan(start=sent_parse.start, end=sent_parse.end, score=score)
                 for sent_parse, score in zip(sent_parses, sent_scores)]
 
+def cosine_similarity(a: npt.NDArray[np.float_], b: npt.NDArray[np.float_]) -> float:
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))

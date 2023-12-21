@@ -32,8 +32,8 @@ class OpenAIEmbedding:
             response = with_retry(
                 lambda: OpenAIEmbedding.client.embeddings.create(model=model, input=batch),
                 RateLimitError,
-                3,
-                10)
+                5,
+                30)
             # TODO error checking
             results.extend(d.embedding for d in response.data)
         return np.array(results)
