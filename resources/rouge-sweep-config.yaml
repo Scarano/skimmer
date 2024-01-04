@@ -1,0 +1,34 @@
+#method: bayes
+method: grid
+metric:
+  name: rouge_1_f_score
+  goal: maximize
+parameters:
+  method:
+    value:
+      sentence-summary-matching
+#      sentence-complement
+  summary:
+    value: openai
+  summary-prompt:
+    value: few-points-1
+  embedding:
+    value: openai
+  length-penalty:
+    # min: .001
+    # max: .2
+    # distribution: log_uniform_values
+    values:
+      - .01
+      - .05
+  abridge-threshold:
+    values:
+      - 0.1
+      - 0.2
+      - 0.3
+  abridge-max-sentences:
+    values:
+      - 2
+      - 3
+      - 4
+      # - 99
