@@ -9,13 +9,13 @@ This project is a work in progress. It currently contains:
 - A family of methods for scoring sentence / clause importance by summing similarities to an LLM-generated summary of the passage ([summary_matching_scorer.py](skimmer/summary_matching_scorer.py)). This requires comparatively expensive LLM processing, but offers much more flexibility. It provides much better results, subjectively, though the difference is not reflected in the ROUGE scores (see below) in my experience so far.
 - "Demo" code that uses these to set the background color of each sentence / clause. (This is for manual evaluation.)
 - [rouge_eval.py](skimmer/rouge_eval.py) performs evaluations on the CNN / Daily Mail summarization dataset. These evaluations use ROUGE, which is a family of scoring metrics that measure similarity to the human-authored summaries in the dataset.
-- A basic FastAPI service that uses the "summary matching" scorer to _abridge_ text by removing sentences whose importance is below a threshold.
+- A basic FastAPI service that uses the "summary matching" scorer to highlight text (by adding HTML), or abridge text (by removing sentences whose importance is below a threshold).
 - Of less interest:
   - [icl_abridger.ipynb](notebooks/icl_abridger.ipynb) is a quick experiment using an LLM to abridge text directly, using in-context learning. Subjectively, this does even worse than the literature (see [Zhang et al 2023](https://arxiv.org/abs/2304.04193)) led me to expect.
   - Implementations using OpenAI embeddings, and using locally-computed [Jina embeddings](https://huggingface.co/jinaai/jina-embeddings-v2-small-en). (These are both for the embedding-based scorer, which isn't as good.)
 
 Future directions:
-- Instead of just highlighting the most important points (or abridging the least important), this could be adapted to highlight the sections that are most semantically relevant to abstract queries (e.g., "What parts of this paper discuss specific differences from previous work?"). To do this, the summary-matching scorer prompt can be altered with placeholders to accommodate such queries.
+- Instead of just highlighting the most important points (or abridging the least important), this could be adapted to highlight the sections that are most semantically relevant to abstract queries (e.g., "What parts of this paper discuss specific differences from previous work?"). To do this, the summary-matching scorer prompt can be altered with placeholders to accommodate user-originating queries.
 - Useful front-ends, possibly including:
   - Command-line tool for highlighting PDFs.
   - Browser plugin for highlighting blog articles.
@@ -62,10 +62,17 @@ uvicorn api.fastapi_service:app --reload
 ```
 
 ```
-curl -X POST "http://localhost:8000/score" -H  "accept: application/json" -H  "Content-Type: application/json" -d "{\"text\":\"Stocks fell today. Tech stocks led the sell-off, falling 5%. A spokesperson for Microsoft said not to worry. This person reminded us that stocks go up and down all the time. Nevertheless, Microsoft fell 10% on news that bad stuff might happen.\"}"
+curl -X POST "http://localhost:8000/score" -H  "accept: application/json" -H  "Content-Type: application/json" -d "{\"text\":\"Stocks fell today. Tech stocks led the sell-off, falling 5%. A spokesperson for Microsoft said not to worry. This person reminded us that stocks go up and down all the time. Nevertheless, Microsoft fell 10% on news that bad stuff might happen.\"}" \
+  | jq .   # use jq to pritty-print; omit this if jq not installed
 ```
 
 ```
-curl -X POST "http://localhost:8000/abridge" -H  "accept: application/json" -H  "Content-Type: application/json" -d "{\"text\":\"Stocks fell today. Tech stocks led the sell-off, falling 5%. A spokesperson for Microsoft said not to worry. This person reminded us that stocks go up and down all the time. Nevertheless, Microsoft fell 10% on news that bad stuff might happen.\", \"keep\": 0.5}"
+curl -X POST "http://localhost:8000/highlight" -H  "accept: application/json" -H  "Content-Type: application/json" -d "{\"text\":\"Stocks fell today. Tech stocks led the sell-off, falling 5%. A spokesperson for Microsoft said not to worry. This person reminded us that stocks go up and down all the time. Nevertheless, Microsoft fell 10% on news that bad stuff might happen.\", \"proportion\": 0.25}" \
+  | jq . --raw-output > test.html
+open test.html
+```
+
+```
+curl -X POST "http://localhost:8000/abridge" -H  "accept: application/json" -H  "Content-Type: application/json" -d "{\"text\":\"Stocks fell today. Tech stocks led the sell-off, falling 5%. A spokesperson for Microsoft said not to worry. This person reminded us that stocks go up and down all the time. Nevertheless, Microsoft fell 10% on news that bad stuff might happen.\", \"keep\": 0.25}"
 ```
 
