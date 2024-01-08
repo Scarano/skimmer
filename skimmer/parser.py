@@ -123,11 +123,12 @@ class StanzaParser(Parser):
 
             # Build map from word indexes to their heads' indexes
             # Stanza's word indexes are off by one to accommodate the implicit initial ROOT node,
-            # so we'll subtract 1 to that they line up with the actual word indexes.
+            # so we'll subtract 1, so that they line up with the actual word indexes.
             # Beware: the ROOT head will now be -1 instead of 0.
             head_map = {w.id - 1: w.head - 1 for w in sentence.words}
 
-            # Reverse it -- build map from word index to list of word indexes whose heads are that word
+            # Reverse it -- build map from word index to list of word indexes whose heads are
+            # that word
             rev_map = reverse_dict(head_map)
 
             # Now build map from word index to set of all indexes dominated by that word
@@ -156,7 +157,7 @@ class RightBranchingParser(Parser):
     A degenrate parser that creates a right-branching dependency parse. (But it's still does
     useful tokenization and sentence-segmentation.)
 
-    This was created as a quick replacement for Parser for cases where I don't actually need
+    This was created as a quick replacement for StanzaParser for cases where I don't actually need
     real parsing (which turns out to be less useful for this problem than I originally hoped).
     This way, I don't have to re-write code that uses the DepParse object.
 

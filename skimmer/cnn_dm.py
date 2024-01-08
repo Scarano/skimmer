@@ -10,6 +10,9 @@ from skimmer.util import IndexedEnum
 
 
 class CNN_DM:
+    """
+    Loads specified subset of CNN / Daily Mail summarization dataset.
+    """
 
     class DataSplit(IndexedEnum):
         TEST = 'test'
