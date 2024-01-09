@@ -42,9 +42,10 @@ class SummaryMatchingScorer(SpanScorer):
             # For each sentence i, add cosine similarity between this sentence's embedding and
             # sent_embeddings[i] to scores[i].
             # print(sent_embeddings @ summary_embed[i])
-            scores += sent_embeddings @ summary_embed[i]
+            scores = np.maximum(scores, sent_embeddings @ summary_embed[i])
+            # scores += sent_embeddings @ summary_embed[i]
 
-        scores /= len(sent_parses)
+        # scores /= len(sent_parses)
 
         return [ScoredSpan(start=sent_parse.start, end=sent_parse.end,
                            text=sent_parse.text,
@@ -90,8 +91,9 @@ class SummaryMatchingClauseScorer:
         # and sent_embeddings[i] to scores[i].
         for i in range(len(summary_embed)):
             # print(sent_embeddings @ summary_embed[i])
-            var_scores += sent_embeddings @ summary_embed[i]
-        var_scores /= len(summary_embed)
+            # set var_scores to max of var_scores and `sent_embeddings @ summary_embed[i]`
+            var_scores = np.maximum(var_scores, sent_embeddings @ summary_embed[i])
+        # var_scores /= len(summary_embed)
 
         var_lengths = np.array([float(len(p)) for _, p in variations])
         var_scores *= var_lengths ** -self.length_penalty
